@@ -18,7 +18,7 @@ Kurulu sürüm, FMEA Studio’daki gibi kendini günceller: açılışta GitHub 
 
 - Güncelleyiciyi içeren ilk sürüm (0.2.0) bir kez tam kurulmalıdır; sonraki sürümler otomatik gelir.
 - Taşınabilir sürüm kendini güncellemez.
-- Yeni sürüm yayınlamak için `package.json` sürümünü artırıp `v<sürüm>` etiketi gönderin; CI kurulum dosyasını, `.blockmap` ve `latest.yml` dosyalarını sürüme yükler.
+- Yeni sürüm yayınlamak için `package.json` sürümünü artırıp main'e gönderin (veya `v<sürüm>` etiketi gönderin). CI o sürüm henüz yoksa `v<sürüm>` sürümünü açar ve kurulum dosyasını, `.blockmap` ve `latest.yml` dosyalarını yükler.
 - Güncelleyici sürümleri anahtarsız okur; bu yüzden depo (veya sürümlerin yayınlandığı depo) herkese açık olmalıdır.
 
 ## Akış

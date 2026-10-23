@@ -45,10 +45,21 @@ jobs:
             release/*.blockmap
             release/latest.yml
           if-no-files-found: error
-      - name: Release (yalnızca v* etiketlerinde)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # main'e package.json'da yeni bir sürüm numarasıyla gelindiğinde v<sürüm> sürümü otomatik açılır
+      - name: Sürüm denetimi
+        id: ver
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          echo "tag=$v" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] || ! git ls-remote --exit-code --tags origin "refs/tags/$v" >/dev/null; then echo "release=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Release
+        if: steps.ver.outputs.release == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: |
             release/*.exe
             release/*.exe.blockmap
