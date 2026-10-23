@@ -1,0 +1,48 @@
+import type { Api } from '../main/preload';
+import type { Project } from '../shared/types';
+
+declare global {
+  interface Window {
+    api: Api;
+  }
+}
+
+// Tarayıcıda (Electron dışında) önizleme için basit yedek; dosya işlemleri localStorage'a yazar.
+function browserFallback(): Api {
+  const key = 'gereksinim-takip-project';
+  const noop = () => () => undefined;
+  const fail = async () => ({ ok: false as const, error: 'Bu özellik yalnızca masaüstü uygulamasında çalışır.' });
+  return {
+    openProject: async () => {
+      const t = localStorage.getItem(key);
+      return t ? { path: 'tarayici', data: JSON.parse(t) as Project } : null;
+    },
+    saveProject: async ({ data }: { data: Project }) => {
+      localStorage.setItem(key, JSON.stringify(data));
+      return 'tarayici';
+    },
+    recent: async () => [],
+    recovery: async () => null,
+    autosave: async () => undefined,
+    discardRecovery: async () => undefined,
+    setDirty: () => undefined,
+    quit: () => undefined,
+    exportExcel: async () => null,
+    pickFiles: async () => [],
+    openPath: async () => '',
+    aiStatus: async () => ({ configured: false, fromEnv: false }),
+    aiSetKey: async () => true,
+    aiRequirements: fail,
+    plannerStatus: async () => ({ ok: true as const, data: { account: null } }),
+    plannerSignIn: fail,
+    plannerSignOut: fail,
+    plannerPlans: fail,
+    plannerPush: fail,
+    plannerPull: fail,
+    onMenu: noop,
+    onOpenFile: noop,
+  } as unknown as Api;
+}
+
+export const api: Api = typeof window !== 'undefined' && window.api ? window.api : browserFallback();
+export const isDesktop = typeof window !== 'undefined' && !!window.api;

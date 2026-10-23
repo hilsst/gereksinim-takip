@@ -1,0 +1,118 @@
+{
+  "name": "gereksinim-takip",
+  "version": "0.1.0",
+  "description": "Dokümanlardan gereksinim listesi, atama ve Teams Planner takibi",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "npm run build:main && concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "build:main": "node scripts/build-main.mjs",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
+    "dist:linux": "npm run build && electron-builder --linux AppImage --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hilsst/gereksinim-takip.git"
+  },
+  "author": "hilsst",
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/hilsst/gereksinim-takip#readme",
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@azure/msal-node": "^7.1.1",
+    "@kenjiuno/msgreader": "^1.29.0",
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^38.8.6",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.24.2",
+    "exceljs": "^4.4.0",
+    "mailparser": "^3.12.4",
+    "mammoth": "^1.13.0",
+    "playwright-core": "^1.64.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "5.7",
+    "vite": "^6.4.4",
+    "vitest": "^3.2.7",
+    "wait-on": "^9.5.1"
+  },
+  "productName": "Gereksinim Takip",
+  "private": true,
+  "build": {
+    "appId": "com.hilsst.gereksinimtakip",
+    "productName": "Gereksinim Takip",
+    "copyright": "hilsst",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "fileAssociations": [
+      {
+        "ext": "greq",
+        "name": "Gereksinim Takip Projesi",
+        "description": "Gereksinim Takip projesi"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Gereksinim Takip",
+      "language": "1055",
+      "artifactName": "Gereksinim-Takip-Kurulum-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "Gereksinim Takip"
+        }
+      }
+    },
+    "portable": {
+      "artifactName": "Gereksinim-Takip-Tasinabilir-${version}.${ext}"
+    }
+  }
+}
