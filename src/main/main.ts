@@ -9,6 +9,7 @@ import type { Project } from '../shared/types';
 import * as ai from './ai';
 import { Graph } from './graph';
 import { SUPPORTED } from './sources';
+import { checkForUpdates, initUpdater, installNow, type UpdateStatus } from './updater';
 
 const APP = 'Gereksinim Takip';
 const EXT = 'greq';
@@ -55,6 +56,7 @@ function addRecent(file: string) {
 function send(channel: string, ...args: unknown[]) {
   win?.webContents.send(channel, ...args);
 }
+const sendUpdate = (s: UpdateStatus) => send('update', s);
 
 function createWindow() {
   win = new BrowserWindow({
@@ -143,7 +145,11 @@ function buildMenu() {
     },
     {
       label: 'Yardım',
-      submenu: [{ label: 'Hakkında', click: () => dialog.showMessageBox(win!, { title: APP, message: `${APP} ${app.getVersion()}`, detail: 'Dokümanlardan gereksinim listesi, atama ve Teams Planner takibi.' }) }],
+      submenu: [
+        { label: 'Güncellemeleri Denetle', click: () => checkForUpdates(true, sendUpdate) },
+        { type: 'separator' },
+        { label: 'Hakkında', click: () => dialog.showMessageBox(win!, { title: APP, message: `${APP} ${app.getVersion()}`, detail: 'Dokümanlardan gereksinim listesi, atama ve Teams Planner takibi.' }) },
+      ],
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(tpl));
@@ -204,6 +210,8 @@ function registerIpc() {
     dirty = v;
     win?.setTitle(`${APP}${v ? ' •' : ''}`);
   });
+  ipcMain.on('update:check', () => checkForUpdates(true, sendUpdate));
+  ipcMain.on('update:install', () => installNow());
   ipcMain.on('app:quit', () => {
     forceClose = true;
     win?.close();
@@ -310,6 +318,7 @@ app.whenReady().then(() => {
   registerIpc();
   buildMenu();
   createWindow();
+  win!.webContents.once('did-finish-load', () => initUpdater(sendUpdate));
   const fileArg = process.argv.find((a) => a.endsWith(`.${EXT}`));
   if (fileArg) win!.webContents.once('did-finish-load', () => send('open-file', path.resolve(fileArg)));
   app.on('activate', () => {

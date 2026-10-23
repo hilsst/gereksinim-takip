@@ -44,6 +44,9 @@ function browserFallback(): Api {
     flowPush: fail,
     flowPull: fail,
     onMenu: noop,
+    checkUpdates: () => undefined,
+    installUpdate: () => undefined,
+    onUpdate: noop,
     onOpenFile: noop,
   } as unknown as Api;
 }

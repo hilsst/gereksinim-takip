@@ -29,6 +29,7 @@ export function App() {
   const [tab, setTab] = useState<TabKey>('overview');
   const [settings, setSettings] = useState(false);
   const [welcome, setWelcome] = useState(true);
+  const [updateReady, setUpdateReady] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [recovery, setRecovery] = useState<{ path?: string; data: Project; at: string } | null>(null);
 
@@ -104,6 +105,18 @@ export function App() {
     [open, save, exportExcel, undo, redo], // eslint-disable-line react-hooks/exhaustive-deps
   );
   useEffect(() => api.onOpenFile((p) => open(p)), [open]);
+  useEffect(
+    () =>
+      api.onUpdate((s) => {
+        if (s.state === 'checking') toast('Güncellemeler denetleniyor…');
+        else if (s.state === 'available') toast(`Yeni sürüm ${s.version} indiriliyor (yalnızca değişen kısım)…`);
+        else if (s.state === 'downloaded') setUpdateReady(s.version);
+        else if (s.state === 'none' && s.manual) toast('Gereksinim Takip güncel.');
+        else if (s.state === 'unsupported' && s.manual) toast('Otomatik güncelleme yalnızca kurulu Windows sürümünde çalışır (taşınabilir sürümde çalışmaz).', 'warn');
+        else if (s.state === 'error' && s.manual) toast(`Güncelleme denetlenemedi: ${s.message}`, 'err');
+      }),
+    [toast],
+  );
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -267,6 +280,13 @@ export function App() {
       {settings && <SettingsDialog onClose={() => setSettings(false)} />}
 
       <div className="toasts">
+        {updateReady && (
+          <div className="toast">
+            Sürüm {updateReady} indirildi; uygulama kapanınca kurulur.{' '}
+            <button className="btn" onClick={() => api.installUpdate()}>Şimdi yeniden başlat</button>{' '}
+            <button className="btn" onClick={() => setUpdateReady(null)}>Sonra</button>
+          </div>
+        )}
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.kind}`}>
             {t.msg}

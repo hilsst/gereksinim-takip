@@ -8,9 +8,18 @@ Gereksinim ve açık konu mantığı FMEA Studio V4.6 ile aynıdır (REQ / ISS k
 
 ## Kurulum (Windows)
 
-1. GitHub’da **Actions → Build** sayfasından son başarılı çalışmayı açın ve **Gereksinim-Takip-Windows** dosyasını indirin.
+1. GitHub’da **Releases** sayfasından son sürümün `Gereksinim-Takip-Kurulum-….exe` dosyasını indirin (ara derlemeler için **Actions → Build → Gereksinim-Takip-Windows**).
 2. `Gereksinim-Takip-Kurulum-….exe` kurulum sihirbazıdır, `Gereksinim-Takip-Tasinabilir-….exe` kurulum gerektirmeden çalışır.
 3. Uygulama kod imzalı olmadığı için SmartScreen “Bilinmeyen yayımcı” uyarısı gösterebilir: **Ek bilgi → Yine de çalıştır**.
+
+### Güncellemeler
+
+Kurulu sürüm, FMEA Studio’daki gibi kendini günceller: açılışta GitHub Releases’ta yeni sürüm olup olmadığına bakar, yalnızca değişen blokları indirir (blockmap) ve uygulama kapanırken kurar. İndirme bitince sağ altta **Şimdi yeniden başlat** düğmesi çıkar. Elle denetim: **Yardım → Güncellemeleri Denetle**.
+
+- Güncelleyiciyi içeren ilk sürüm (0.2.0) bir kez tam kurulmalıdır; sonraki sürümler otomatik gelir.
+- Taşınabilir sürüm kendini güncellemez.
+- Yeni sürüm yayınlamak için `package.json` sürümünü artırıp `v<sürüm>` etiketi gönderin; CI kurulum dosyasını, `.blockmap` ve `latest.yml` dosyalarını sürüme yükler.
+- Güncelleyici sürümleri anahtarsız okur; bu yüzden depo (veya sürümlerin yayınlandığı depo) herkese açık olmalıdır.
 
 ## Akış
 

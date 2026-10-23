@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SyncResult } from '../shared/planner';
 import type { Project } from '../shared/types';
+import type { UpdateStatus } from './updater';
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 type Cfg = { clientId: string; tenantId: string };
@@ -36,6 +37,15 @@ const api = {
     ipcRenderer.on('menu', h);
     return () => {
       ipcRenderer.removeListener('menu', h);
+    };
+  },
+  checkUpdates: () => ipcRenderer.send('update:check'),
+  installUpdate: () => ipcRenderer.send('update:install'),
+  onUpdate: (cb: (s: UpdateStatus) => void) => {
+    const h = (_e: unknown, s: UpdateStatus) => cb(s);
+    ipcRenderer.on('update', h);
+    return () => {
+      ipcRenderer.removeListener('update', h);
     };
   },
   onOpenFile: (cb: (p: string) => void) => {
