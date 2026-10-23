@@ -119,11 +119,14 @@ export async function buildWorkbook(p: Project): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Gereksinim Takip';
   wb.created = new Date();
-  summarySheet(wb, p);
+  // Rapor yalnızca bu projede iş atanmış kişileri gösterir; kayıtlı ekibin geri kalanı rapora girmez
+  const assigned = new Set([...p.requirements, ...p.issues].map((r) => r.assignee).filter(Boolean));
+  const team: Project = { ...p, people: p.people.filter((x) => assigned.has(x.id)) };
+  summarySheet(wb, team);
   tableSheet(wb, p, 'requirements');
   tableSheet(wb, p, 'issues');
   tableSheet(wb, p, 'documents');
-  tableSheet(wb, p, 'people');
+  tableSheet(wb, team, 'people');
   logSheet(wb, p);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

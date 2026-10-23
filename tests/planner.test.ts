@@ -211,5 +211,8 @@ describe('Excel raporu', () => {
     await wb.xlsx.load((await buildWorkbook(sampleProject())) as unknown as ArrayBuffer);
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Özet', 'Gereksinimler', 'Açık Konular', 'Dokümanlar', 'Ekip', 'Planner Günlüğü']);
     expect(wb.getWorksheet('Gereksinimler')!.getCell(4, 1).value).toBe('REQ-001');
+    // Ekip sayfası yalnızca bu projede iş atanan kişileri içerir (P-003 atanmamış)
+    const ekip = wb.getWorksheet('Ekip')!;
+    expect([ekip.getCell(4, 1).value, ekip.getCell(5, 1).value, ekip.getCell(6, 1).value]).toEqual(['P-001', 'P-002', null]);
   });
 });
