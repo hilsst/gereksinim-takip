@@ -7,6 +7,9 @@ interface PlannerCtx {
   account: { name: string; username: string } | null;
   busy: string | null;
   configured: boolean;
+  /** Gönderim ve kontrol için bağlantı hazır mı (seçili moda göre). */
+  ready: boolean;
+  mode: 'flow' | 'graph';
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   plans: () => Promise<{ id: string; title: string }[]>;
@@ -28,15 +31,16 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
   const latest = useLatest(project);
   const busyRef = useRef(false);
   const cfg = { clientId: project.planner.clientId, tenantId: project.planner.tenantId };
-  const configured = !!cfg.clientId;
+  const mode = project.planner.mode;
+  const configured = mode === 'flow' ? !!project.planner.flowFolder : !!cfg.clientId;
 
   useEffect(() => {
-    if (!isDesktop || !configured) {
+    if (!isDesktop || !cfg.clientId || mode !== 'graph') {
       setAccount(null);
       return;
     }
     api.plannerStatus(cfg).then((r) => setAccount(r.ok ? r.data.account : null));
-  }, [cfg.clientId, cfg.tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cfg.clientId, cfg.tenantId, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const apply = useCallback(
     (r: SyncResult) => {
@@ -85,17 +89,17 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
 
   const push = (ids: string[]) =>
     guarded(`${ids.length} atama Planner'a gönderiliyor…`, async () => {
-      const r = await api.plannerPush({ project: latest.current, ids });
+      const r = latest.current.planner.mode === 'flow' ? await api.flowPush({ project: latest.current, ids }) : await api.plannerPush({ project: latest.current, ids });
       if (!r.ok) return toast(`Planner: ${r.error}`, 'err');
       const errs = apply(r.data);
       const sent = r.data.log.filter((l) => l.kind === 'ok').length;
-      toast(errs ? `${errs} satır gönderilemedi; ayrıntılar Planner günlüğünde` : `${sent} işlem tamamlandı`, errs ? 'warn' : 'ok');
+      toast(errs ? `${errs} satır gönderilemedi; ayrıntılar Planner günlüğünde` : latest.current.planner.mode === 'flow' ? `${sent} istek Power Automate'e bırakıldı` : `${sent} işlem tamamlandı`, errs ? 'warn' : 'ok');
     });
 
   const pull = useCallback(
     (quiet = false) =>
       guarded('Planner kontrol ediliyor…', async () => {
-        const r = await api.plannerPull({ project: latest.current });
+        const r = latest.current.planner.mode === 'flow' ? await api.flowPull({ project: latest.current }) : await api.plannerPull({ project: latest.current });
         if (!r.ok) {
           if (!quiet) toast(`Planner: ${r.error}`, 'err');
           return;
@@ -110,7 +114,7 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
 
   // Uygulama açıkken düzenli kontrol
   const minutes = project.planner.pollMinutes;
-  const ready = !!account && !!project.planner.planId;
+  const ready = mode === 'flow' ? !!project.planner.flowFolder : !!account && !!project.planner.planId;
   useEffect(() => {
     if (!ready || !minutes) return;
     pull(true);
@@ -118,6 +122,6 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [ready, minutes, pull]);
 
-  const value: PlannerCtx = { account, busy, configured, signIn, signOut, plans, push, pull };
+  const value: PlannerCtx = { account, busy, configured, ready, mode, signIn, signOut, plans, push, pull };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

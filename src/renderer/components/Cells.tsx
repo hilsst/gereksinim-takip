@@ -103,7 +103,8 @@ export function badgeClass(key: string, text: string): string {
   if (key === 'priority') return text === 'Critical' ? 'b-rose' : text === 'Important' ? 'b-peach' : 'b-gray';
   if (key === 'discipline') return text === 'Tasarım' ? 'b-lav' : text === 'Konfigürasyon' ? 'b-sky' : 'b-peach';
   if (key === 'late') return 'b-rose';
-  if (key === 'planner' || key === 'linked') return 'b-mint';
+  if (key === 'planner') return text === 'Kuyrukta' ? 'b-butter' : 'b-mint';
+  if (key === 'linked') return 'b-mint';
   if (key === 'dataStatus' && text.startsWith('VERİ YOK')) return 'b-butter';
   if (key === 'evidenceType') return 'b-lav';
   return '';

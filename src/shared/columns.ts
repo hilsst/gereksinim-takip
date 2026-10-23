@@ -28,7 +28,10 @@ const assignCols = (): Col[] => [
   { key: 'dueDate', label: 'Miat', width: 125, type: 'date' },
   sel('workStatus', 'Durum', LISTS.workStatus, 125, { help: 'Planner\'da görev tamamlanınca otomatik "Kapandı" olur' }),
   comp('late', 'Gecikme', (r) => (isOverdue(r as unknown as Assignable) ? 'Gecikmiş' : ''), 80),
-  comp('planner', 'Planner', (r) => ((r as unknown as Assignable).plannerTaskId ? 'Gönderildi' : ''), 90, 'Planner görevine bağlı mı'),
+  comp('planner', 'Planner', (r) => {
+    const a = r as unknown as Assignable;
+    return a.plannerTaskId ? 'Gönderildi' : a.plannerEtag === 'flow:kuyrukta' ? 'Kuyrukta' : '';
+  }, 90, 'Gönderildi: Planner görevine bağlı · Kuyrukta: Power Automate görevi henüz açmadı'),
   long('closureNote', 'Kapanış Açıklaması (Planner)', 240, { readonly: true }),
   t('closedAt', 'Kapanış', 110, { readonly: true, secondary: true }),
   t('closedBy', 'Kapatan', 120, { readonly: true, secondary: true }),

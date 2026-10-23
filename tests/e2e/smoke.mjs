@@ -52,9 +52,34 @@ await nav('Ekip');
 await win.waitForSelector('[data-row="P-001"]');
 await shot('08-ekip');
 
+// Power Automate modu: klasör seç → istek dosyası → akış sonucu → satır kapanır
+const flowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gt-flow-'));
+await app.evaluate(({ dialog }, dir) => {
+  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
+}, flowDir);
 await nav('Teams Planner');
-await win.waitForSelector('text=İlk kurulum');
-await shot('09-planner');
+await win.waitForSelector('text=Power Automate akışları');
+await win.click('button:has-text("Klasör seç")');
+await win.locator(".badge.b-mint", { hasText: flowDir }).waitFor();
+await shot('09-planner-flow');
+await nav('Gereksinimler');
+await win.locator('[data-row="REQ-001"] td.sticky-col.sel input').check();
+await win.click(".grid-toolbar >> text=Planner'a gönder");
+await win.waitForSelector('[data-row="REQ-001"] td.c-planner >> text=Kuyrukta');
+const outFiles = fs.readdirSync(path.join(flowDir, 'giden'));
+const request = JSON.parse(fs.readFileSync(path.join(flowDir, 'giden', outFiles[0]), 'utf8'));
+fs.writeFileSync(path.join(flowDir, 'gelen', 'olusturuldu_REQ-001.json'), JSON.stringify({ olay: 'olusturuldu', kayitId: 'REQ-001', gorevId: 'T-1' }));
+fs.writeFileSync(path.join(flowDir, 'gelen', 'tamamlandi_T-1.json'), '\uFEFF' + JSON.stringify({ olay: 'tamamlandi', gorevId: 'T-1', baslik: request.baslik, aciklama: request.aciklama + 'Kütle 2.31 kg ölçüldü.', tamamlanmaTarihi: '2026-11-01T08:00:00Z' }));
+await nav('Teams Planner');
+await win.click('button:has-text("Şimdi kontrol et")');
+await win.waitForSelector('.log >> text=kapatıldı');
+await shot('09b-planner-log');
+await nav('Gereksinimler');
+await win.waitForSelector('[data-row="REQ-001"] td.c-workStatus');
+const closedStatus = await win.locator('[data-row="REQ-001"] td.c-workStatus select').inputValue();
+const closureNote = await win.locator('[data-row="REQ-001"] td.c-closureNote').innerText();
+const processed = fs.readdirSync(path.join(flowDir, 'gelen', 'islenen')).length;
+await shot('09c-kapandi');
 
 await nav('Özet');
 await win.waitForSelector('.people');
@@ -65,6 +90,6 @@ await win.waitForSelector('.modal');
 await shot('11-ayarlar');
 
 await app.evaluate(({ app }) => app.exit(0));
-const result = { assigned, errors };
+const result = { assigned, outFiles, closedStatus, closureNote, processed, errors };
 console.log(JSON.stringify(result, null, 2));
-if (assigned !== 'Atandı' || errors.length) process.exit(1);
+if (assigned !== 'Atandı' || outFiles.length !== 1 || closedStatus !== 'Kapandı' || !closureNote.includes('2.31') || processed !== 2 || errors.length) process.exit(1);

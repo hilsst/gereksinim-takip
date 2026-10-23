@@ -77,7 +77,7 @@ function AssignableTab({ table }: { table: AssignableTable }) {
   const [view, setView] = useState<View>('all');
   const [discipline, setDiscipline] = useState('');
   const [person, setPerson] = useState('');
-  const canSend = !!planner.account && !!project.planner.planId;
+  const canSend = planner.ready;
 
   const approve = (ids: string[]) => {
     mutate((d) => {
@@ -98,7 +98,7 @@ function AssignableTab({ table }: { table: AssignableTable }) {
             <button className="btn soft" disabled={!s.length} onClick={() => setAssign(true)}>
               👤 Ata{s.length ? ` (${s.length})` : ''}
             </button>
-            <button className="btn sky" disabled={!s.length || !canSend || !!planner.busy} title={canSend ? '' : 'Planner sekmesinden giriş yapıp plan seçin'} onClick={() => planner.push(s)}>
+            <button className="btn sky" disabled={!s.length || !canSend || !!planner.busy} title={canSend ? '' : 'Önce Teams Planner ekranında bağlantıyı kurun'} onClick={() => planner.push(s)}>
               ↗ Planner'a gönder
             </button>
             {table === 'requirements' && (

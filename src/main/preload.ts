@@ -27,6 +27,10 @@ const api = {
   plannerPlans: (cfg: Cfg): Promise<Result<{ id: string; title: string }[]>> => ipcRenderer.invoke('planner:plans', cfg),
   plannerPush: (a: { project: Project; ids: string[] }): Promise<Result<SyncResult>> => ipcRenderer.invoke('planner:push', a),
   plannerPull: (a: { project: Project }): Promise<Result<SyncResult>> => ipcRenderer.invoke('planner:pull', a),
+  flowPickFolder: (): Promise<string | null> => ipcRenderer.invoke('flow:pickFolder'),
+  flowStatus: (root: string): Promise<Result<{ waitingOut: number; waitingIn: number }>> => ipcRenderer.invoke('flow:status', root),
+  flowPush: (a: { project: Project; ids: string[] }): Promise<Result<SyncResult>> => ipcRenderer.invoke('flow:push', a),
+  flowPull: (a: { project: Project }): Promise<Result<SyncResult>> => ipcRenderer.invoke('flow:pull', a),
   onMenu: (cb: (id: string) => void) => {
     const h = (_e: unknown, id: string) => cb(id);
     ipcRenderer.on('menu', h);

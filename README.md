@@ -27,6 +27,13 @@ Desteklenen dosyalar: `.docx`, `.xlsx`/`.xlsm`, `.pdf`, `.png`/`.jpg`, `.msg`, `
 
 ## Teams Planner senkronu
 
+İki yol vardır, Teams Planner ekranından seçilir:
+
+- **Power Automate (varsayılan)**: Azure kaydı ve Premium lisans gerekmez. OneDrive/SharePoint ile senkron bir klasörde `giden` / `gelen` JSON dosyaları kullanılır. İki akışın kurulum tarifi: [docs/power-automate.md](docs/power-automate.md).
+- **Doğrudan bağlantı (Graph)**: Azure uygulama kaydı gerekir. Anlık çalışır; Planner’da değişen miat ve görevin yeniden açılması da uygulamaya gelir. Ayrıntılar aşağıda.
+
+### Graph modu
+
 - **Planner’a gönder**: seçili her atama için plana görev açılır. Görev başlığı `REQ-012 · gereksinim metni`, miat Planner bitiş tarihi, sorumlu kişi görevin atananı olur. Her disiplin için bir kova (Tasarım, Konfigürasyon, İmalat) otomatik oluşturulur. Görev açıklamasına gereksinim, kabul kriteri, kanıt ve kaynak yazılır; sonuna bir ayraç çizgisi eklenir.
 - Zaten gönderilmiş bir satırda miat, sorumlu, disiplin veya metin değişirse tekrar **Planner’a gönder** görevi günceller.
 - **Kontrol** (uygulama açıkken her N dakikada bir veya “Şimdi kontrol et”):

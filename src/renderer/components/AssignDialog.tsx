@@ -15,7 +15,7 @@ export function AssignDialog({ table, ids, onClose }: { table: AssignableTable; 
   const [discipline, setDiscipline] = useState<Discipline>(same('discipline') as Discipline);
   const [assignee, setAssignee] = useState(String(same('assignee')));
   const [dueDate, setDueDate] = useState(String(same('dueDate')));
-  const canSend = !!project.planner.planId && !!planner.account;
+  const canSend = planner.ready;
   const [send, setSend] = useState(canSend);
   const people = activePeople(project, discipline || undefined);
   const closed = rows.filter((r) => isClosed(r)).length;
@@ -82,7 +82,7 @@ export function AssignDialog({ table, ids, onClose }: { table: AssignableTable; 
           <span style={{ fontWeight: 400, fontSize: 13 }}>Atamaları hemen Teams Planner'a gönder</span>
         </label>
       </div>
-      {!canSend && <div className="callout peach">Planner'a göndermek için önce Planner sekmesinden giriş yapıp bir plan seçin. Atamayı şimdi kaydedip sonra gönderebilirsiniz.</div>}
+      {!canSend && <div className="callout peach">Planner'a göndermek için önce Teams Planner ekranında bağlantıyı kurun. Atamayı şimdi kaydedip sonra gönderebilirsiniz.</div>}
       {project.people.length === 0 && <div className="callout">Ekip sekmesine tasarım, konfigürasyon ve imalat mühendislerini ekleyin.</div>}
       {closed > 0 && <div className="callout">{closed} kapalı/iptal satır atlanacak.</div>}
     </Modal>

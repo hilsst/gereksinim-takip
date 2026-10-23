@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import fssync from 'node:fs';
 import path from 'node:path';
 import { buildWorkbook } from '../shared/excel';
+import { applyEvents, buildRequests, DONE_DIR, IN_DIR, OUT_DIR, type FlowEvent } from '../shared/flow';
 import { pullCompletions, pushAssignments } from '../shared/planner';
 import type { Project } from '../shared/types';
 import * as ai from './ai';
@@ -260,6 +261,49 @@ function registerIpc() {
   }));
   ipcMain.handle('planner:push', wrap(async (a: { project: Project; ids: string[] }) => pushAssignments(graphFor(a.project.planner), a.project, a.ids)));
   ipcMain.handle('planner:pull', wrap(async (a: { project: Project }) => pullCompletions(graphFor(a.project.planner), a.project)));
+
+  // ---------- Power Automate modu (klasör alışverişi)
+  const flowDirs = async (root: string) => {
+    if (!root) throw new Error('Planner ekranında Power Automate klasörünü seçin.');
+    if (!fssync.existsSync(root)) throw new Error(`Klasör bulunamadı: ${root}. OneDrive/SharePoint senkronunun açık olduğunu kontrol edin.`);
+    const dirs = { out: path.join(root, OUT_DIR), in: path.join(root, IN_DIR), done: path.join(root, IN_DIR, DONE_DIR) };
+    for (const d of Object.values(dirs)) await fs.mkdir(d, { recursive: true });
+    return dirs;
+  };
+  ipcMain.handle('flow:pickFolder', async () => {
+    const r = await dialog.showOpenDialog(win!, { title: 'OneDrive / SharePoint ile senkron klasör', properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    await flowDirs(r.filePaths[0]);
+    return r.filePaths[0];
+  });
+  ipcMain.handle('flow:status', wrap(async (root: string) => {
+    const d = await flowDirs(root);
+    const count = async (dir: string) => (await fs.readdir(dir)).filter((f) => f.toLowerCase().endsWith('.json')).length;
+    return { waitingOut: await count(d.out), waitingIn: await count(d.in) };
+  }));
+  ipcMain.handle('flow:push', wrap(async (a: { project: Project; ids: string[] }) => {
+    const d = await flowDirs(a.project.planner.flowFolder);
+    const { files, result } = buildRequests(a.project, a.ids);
+    // Doğrudan .json yazılır: OneDrive istemcisi dosyayı kapandıktan sonra yükler, akış tetikleyicisi yeniden adlandırmayı görmez.
+    for (const f of files) await fs.writeFile(path.join(d.out, f.name), f.content, 'utf8');
+    return result;
+  }));
+  ipcMain.handle('flow:pull', wrap(async (a: { project: Project }) => {
+    const d = await flowDirs(a.project.planner.flowFolder);
+    const names = (await fs.readdir(d.in)).filter((f) => f.toLowerCase().endsWith('.json'));
+    const events: { name: string; event: FlowEvent | null; error?: string }[] = [];
+    for (const name of names) {
+      try {
+        const text = (await fs.readFile(path.join(d.in, name), 'utf8')).replace(/^\uFEFF/, '');
+        events.push({ name, event: JSON.parse(text) as FlowEvent });
+      } catch (e) {
+        events.push({ name, event: null, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    const result = applyEvents(a.project, events);
+    for (const name of names) await fs.rename(path.join(d.in, name), path.join(d.done, name)).catch(() => undefined);
+    return result;
+  }));
 }
 
 app.whenReady().then(() => {

@@ -149,8 +149,8 @@ export function App() {
         <span className="grow" />
         <div className="side-foot">
           <div className="sync-chip" title={planner.busy ?? ''}>
-            <span className={`dot ${planner.account && project.planner.planId ? 'on' : 'off'}`} />
-            {planner.busy ? 'Planner senkronu…' : planner.account && project.planner.planId ? `Planner: ${project.planner.planTitle || 'bağlı'}` : 'Planner bağlı değil'}
+            <span className={`dot ${planner.ready ? 'on' : 'off'}`} />
+            {planner.busy ? 'Planner senkronu…' : planner.ready ? (planner.mode === 'flow' ? 'Planner: Power Automate' : `Planner: ${project.planner.planTitle || 'bağlı'}`) : 'Planner bağlı değil'}
           </div>
           <div className="file">{filePath ? filePath : 'Kaydedilmedi'}{dirty ? ' •' : ''}</div>
         </div>

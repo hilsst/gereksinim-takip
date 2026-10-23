@@ -49,6 +49,10 @@ export interface ProjectMeta {
 }
 
 export interface PlannerSettings {
+  /** flow: Power Automate + OneDrive/SharePoint klasörü (Azure kaydı gerekmez); graph: doğrudan Microsoft Graph. */
+  mode: 'flow' | 'graph';
+  /** Power Automate modunda OneDrive/SharePoint ile senkron yerel klasör. */
+  flowFolder: string;
   /** Azure AD (Entra ID) uygulama kaydı – "Mobile and desktop", yönlendirme http://localhost */
   clientId: string;
   tenantId: string;

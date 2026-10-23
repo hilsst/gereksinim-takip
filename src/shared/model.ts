@@ -61,7 +61,7 @@ export function newProject(): Project {
   return {
     schema: 'gereksinim-takip/1',
     meta: { name: '', partNumber: '', partName: '', customer: '', program: '', drawingRevision: '', owner: '', startDate: new Date().toISOString().slice(0, 10), scope: '', confidentiality: '' },
-    planner: { clientId: '', tenantId: '', planId: '', planTitle: '', buckets: {}, pollMinutes: 5, lastSync: '' },
+    planner: { mode: 'flow', flowFolder: '', clientId: '', tenantId: '', planId: '', planTitle: '', buckets: {}, pollMinutes: 5, lastSync: '' },
     documents: [],
     requirements: [],
     issues: [],

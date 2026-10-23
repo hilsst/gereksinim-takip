@@ -39,6 +39,10 @@ function browserFallback(): Api {
     plannerPlans: fail,
     plannerPush: fail,
     plannerPull: fail,
+    flowPickFolder: async () => null,
+    flowStatus: fail,
+    flowPush: fail,
+    flowPull: fail,
     onMenu: noop,
     onOpenFile: noop,
   } as unknown as Api;
