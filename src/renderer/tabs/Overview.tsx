@@ -73,6 +73,7 @@ export function OverviewTab({ go }: { go: (t: TabKey) => void }) {
                     <th>Gecikmiş</th>
                     <th>Kapanan</th>
                     <th>Zamanında</th>
+                    <th>Gecikme</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -85,6 +86,7 @@ export function OverviewTab({ go }: { go: (t: TabKey) => void }) {
                       <td className="n">{s.overdue ? <span className="badge b-rose">{s.overdue}</span> : 0}</td>
                       <td className="n">{s.closed}</td>
                       <td className="n">{s.onTimeRate == null ? '–' : `%${s.onTimeRate}`}</td>
+                      <td className="n">{s.delayDays ? <span className="badge b-rose">{s.delayDays} gün</span> : '–'}</td>
                       <td>
                         <div className="bar" title={`${s.closed} kapandı · ${s.open - s.overdue} açık · ${s.overdue} gecikmiş`}>
                           <i className="c" style={{ width: `${(s.closed / s.total) * 100}%` }} />

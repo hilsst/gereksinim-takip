@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isClosed, isOverdue, LISTS, mergeMembers } from '../../shared/model';
+import { delayDays, isClosed, LISTS, mergeMembers } from '../../shared/model';
 import type { AnyRow, Assignable, AssignableTable, DocumentRow } from '../../shared/types';
 import { api } from '../api';
 import { PasteDialog, useExtraction } from '../components/Ai';
@@ -61,7 +61,7 @@ function viewFilter(view: View, discipline: string, person: string) {
     switch (view) {
       case 'unassigned': return !a.assignee && !isClosed(a);
       case 'open': return !!a.assignee && !isClosed(a);
-      case 'late': return isOverdue(a);
+      case 'late': return delayDays(a) > 0;
       case 'closed': return a.workStatus === 'Kapandı';
       case 'noEvidence': return 'evidenceType' in a && !a.evidenceType;
       default: return true;

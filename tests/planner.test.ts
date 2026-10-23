@@ -216,3 +216,14 @@ describe('Excel raporu', () => {
     expect([ekip.getCell(4, 1).value, ekip.getCell(5, 1).value, ekip.getCell(6, 1).value]).toEqual(['P-001', 'P-002', null]);
   });
 });
+
+describe('Gecikme günü', () => {
+  it('kapanan işte kapanış gününe kadar sayılır ve korunur, açık işte bugüne kadar', async () => {
+    const { delayDays } = await import('../src/shared/model');
+    const base = { dueDate: '2026-10-22', closedAt: '', workStatus: 'Atandı' } as Parameters<typeof delayDays>[0];
+    expect(delayDays({ ...base, workStatus: 'Kapandı', closedAt: '2026-10-23T15:00:00Z' }, '2026-11-30')).toBe(1);
+    expect(delayDays({ ...base, workStatus: 'Kapandı', closedAt: '2026-10-21T15:00:00Z' }, '2026-11-30')).toBe(0);
+    expect(delayDays(base, '2026-10-25')).toBe(3);
+    expect(delayDays({ ...base, workStatus: 'İptal' }, '2026-10-25')).toBe(0);
+  });
+});

@@ -89,6 +89,17 @@ export function normalizeProject(raw: Partial<Project>): Project {
 
 export const isClosed = (r: Assignable) => r.workStatus === 'Kapandı' || r.workStatus === 'İptal';
 
+/**
+ * Gecikme gün sayısı: kapanan işte kapanış günü − miat, açık işte bugün − miat (en az 0).
+ * Kapandıktan sonra da korunur; iptal edilen işte 0.
+ */
+export function delayDays(r: Assignable, today = new Date().toISOString().slice(0, 10)): number {
+  if (!r.dueDate || r.workStatus === 'İptal') return 0;
+  const end = r.workStatus === 'Kapandı' ? (r.closedAt || today).slice(0, 10) : today;
+  const days = Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${r.dueDate}T00:00:00Z`)) / 86_400_000);
+  return Number.isFinite(days) && days > 0 ? days : 0;
+}
+
 export function isOverdue(r: Assignable, today = new Date().toISOString().slice(0, 10)): boolean {
   return !!r.dueDate && !isClosed(r) && r.dueDate < today;
 }

@@ -81,11 +81,11 @@ function tableSheet(wb: ExcelJS.Workbook, p: Project, key: TableKey) {
 
 function summarySheet(wb: ExcelJS.Workbook, p: Project) {
   const ws = wb.addWorksheet('Özet');
-  title(ws, p, 'Gereksinim Takip Özeti', 8);
+  title(ws, p, 'Gereksinim Takip Özeti', 9);
   const t = totals(p);
   const lines: [string, number | string][] = [
     ['Gereksinim', t.requirements], ['Açık konu', t.issuesOpen], ['Atanmamış', t.unassigned], ['Planner\'a gönderilmemiş', t.notSent],
-    ['Açık atama', t.open], ['Gecikmiş', t.overdue], ['Kapanan', t.closed], ['Kabul kriteri VERİ YOK', t.noData], ['Kanıt türü boş', t.noEvidence],
+    ['Açık atama', t.open], ['Gecikmiş (açık)', t.overdue], ['Kapanan', t.closed], ['Geç kapanan', t.lateClosed], ['Toplam gecikme (gün)', t.delayDays], ['Kabul kriteri VERİ YOK', t.noData], ['Kanıt türü boş', t.noEvidence],
   ];
   lines.forEach(([l, v], i) => {
     ws.getCell(4 + i, 1).value = l;
@@ -93,15 +93,26 @@ function summarySheet(wb: ExcelJS.Workbook, p: Project) {
     ws.getCell(4 + i, 1).font = { bold: true };
   });
   const start = 6 + lines.length;
-  header(ws, start, ['Kişi', 'Disiplin', 'Toplam', 'Açık', 'Gecikmiş', 'Kapanan', 'Zamanında kapanan', 'Zamanında %'], [24, 16, 10, 10, 10, 10, 18, 14]);
+  header(ws, start, ['Kişi', 'Disiplin', 'Toplam', 'Açık', 'Gecikmiş', 'Kapanan', 'Zamanında kapanan', 'Zamanında %', 'Gecikme (gün)'], [24, 16, 10, 10, 10, 10, 18, 14, 14]);
   personSummary(p).forEach((s, i) => {
-    const vals = [s.name, s.discipline, s.total, s.open, s.overdue, s.closed, s.closedOnTime, s.onTimeRate ?? ''];
+    const vals = [s.name, s.discipline, s.total, s.open, s.overdue, s.closed, s.closedOnTime, s.onTimeRate ?? '', s.delayDays];
     vals.forEach((v, j) => {
       const c = ws.getCell(start + 1 + i, j + 1);
       c.value = v;
       c.border = BORDER;
-      if (j === 4 && Number(v) > 0) c.fill = FILL(ROSE);
+      if ((j === 4 || j === 8) && Number(v) > 0) c.fill = FILL(ROSE);
     });
+  });
+  const rows = personSummary(p);
+  const sum = (f: (s: (typeof rows)[number]) => number) => rows.reduce((n, s) => n + f(s), 0);
+  const closed = sum((s) => s.closed);
+  const onTime = sum((s) => s.closedOnTime);
+  const totalRow = ['Proje toplamı', '', sum((s) => s.total), sum((s) => s.open), sum((s) => s.overdue), closed, onTime, closed ? Math.round((onTime / closed) * 100) : '', sum((s) => s.delayDays)];
+  totalRow.forEach((v, j) => {
+    const c = ws.getCell(start + 1 + rows.length, j + 1);
+    c.value = v;
+    c.border = BORDER;
+    c.font = { bold: true };
   });
 }
 

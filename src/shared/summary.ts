@@ -1,5 +1,5 @@
 // Kişi ve disiplin bazında atama özeti (ileride tasarımcı KPI'larının temeli).
-import { isClosed, isOverdue } from './model';
+import { delayDays, isClosed, isOverdue } from './model';
 import type { Assignable, Project } from './types';
 
 export interface PersonSummary {
@@ -11,6 +11,8 @@ export interface PersonSummary {
   overdue: number;
   closed: number;
   closedOnTime: number;
+  /** Toplam gecikme günü (kapanan + açık işler). */
+  delayDays: number;
   /** Zamanında kapanma oranı (%), kapanan yoksa null. */
   onTimeRate: number | null;
 }
@@ -33,6 +35,7 @@ export function personSummary(p: Project, today = new Date().toISOString().slice
       overdue: rows.filter((r) => isOverdue(r, today)).length,
       closed: closed.length,
       closedOnTime: onTime.length,
+      delayDays: rows.reduce((n, r) => n + delayDays(r, today), 0),
       onTimeRate: closed.length ? Math.round((onTime.length / closed.length) * 100) : null,
     };
   });
@@ -48,6 +51,8 @@ export function totals(p: Project, today = new Date().toISOString().slice(0, 10)
     open: all.filter((r) => r.assignee && !isClosed(r)).length,
     overdue: all.filter((r) => isOverdue(r, today)).length,
     closed: all.filter((r) => r.workStatus === 'Kapandı').length,
+    lateClosed: all.filter((r) => r.workStatus === 'Kapandı' && delayDays(r, today) > 0).length,
+    delayDays: all.reduce((n, r) => n + delayDays(r, today), 0),
     noData: p.requirements.filter((r) => r.acceptance.includes('VERİ YOK') || r.dataStatus === 'VERİ YOK – doğrulanmalı').length,
     noEvidence: p.requirements.filter((r) => !r.evidenceType).length,
   };

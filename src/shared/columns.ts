@@ -1,5 +1,5 @@
 // Ekran tabloları ve Excel çıktısı için ortak kolon tanımları.
-import { isOverdue, LISTS, personName } from './model';
+import { delayDays, LISTS, personName } from './model';
 import type { AnyRow, Assignable, Project, TableKey } from './types';
 
 export type ColType = 'text' | 'long' | 'select' | 'person' | 'bool' | 'date' | 'computed';
@@ -28,7 +28,10 @@ const assignCols = (): Col[] => [
   { key: 'assignedAt', label: 'Atama Tarihi', width: 125, type: 'date' },
   { key: 'dueDate', label: 'Miat', width: 125, type: 'date' },
   sel('workStatus', 'Durum', LISTS.workStatus, 125, { help: 'Planner\'da görev tamamlanınca otomatik "Kapandı" olur' }),
-  comp('late', 'Gecikme', (r) => (isOverdue(r as unknown as Assignable) ? 'Gecikmiş' : ''), 80),
+  comp('late', 'Gecikme', (r) => {
+    const d = delayDays(r as unknown as Assignable);
+    return d ? `${d} gün` : '';
+  }, 90, 'Miattan sonra geçen gün; iş kapandıysa kapanış gününe kadar sayılır ve korunur'),
   comp('planner', 'Planner', (r) => {
     const a = r as unknown as Assignable;
     return a.plannerTaskId ? 'Gönderildi' : a.plannerEtag === 'flow:kuyrukta' ? 'Kuyrukta' : '';
