@@ -89,3 +89,20 @@ describe('Power Automate modu', () => {
     expect(idFromTitle('Başka görev')).toBe('');
   });
 });
+
+describe('Ekip üyeleri', () => {
+  it('Teams grubundan gelen üyeler eksikse eklenir, unvandan disiplin tahmin edilir', () => {
+    const p = sampleProject();
+    const r = applyEvents(p, [
+      { name: 'uyeler_1.json', event: { olay: 'uyeler', uyeler: [
+        { ad: 'Ayşe Demir', eposta: 'AYSE.DEMIR@ornek.com', unvan: 'Tasarım Mühendisi' },
+        { ad: 'Can Yılmaz', eposta: 'can.yilmaz@ornek.com', unvan: 'İmalat Mühendisi' },
+        { ad: 'Eposta yok' },
+      ] } },
+    ]);
+    const next = applySync(p, r);
+    expect(next.people).toHaveLength(4);
+    expect(next.people[3]).toMatchObject({ id: 'P-004', name: 'Can Yılmaz', email: 'can.yilmaz@ornek.com', discipline: 'İmalat', active: true });
+    expect(r.keep).toEqual([]);
+  });
+});

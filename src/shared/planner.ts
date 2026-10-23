@@ -1,6 +1,6 @@
 // Teams Planner senkron mantığı. Graph çağrıları GraphLike arayüzü üzerinden yapılır;
 // böylece kurallar ağ olmadan test edilebilir. Fonksiyonlar projeyi değiştirmez, uygulanacak yamaları döner.
-import { checklistTitle, closureFromDescription, isClosed, LISTS, personName, startDateOf, taskDescription, taskTitle } from './model';
+import { checklistTitle, mergeMembers, type Member, closureFromDescription, isClosed, LISTS, personName, startDateOf, taskDescription, taskTitle } from './model';
 import type { Assignable, AssignableTable, IssueRow, PersonRow, Project, RequirementRow, SyncLogEntry } from './types';
 
 export interface PlannerTask {
@@ -40,6 +40,8 @@ export interface RowPatch {
 
 export interface SyncResult {
   patches: RowPatch[];
+  /** Teams grubundan gelen ekip üyeleri (eksikler Ekip listesine eklenir). */
+  members?: Member[];
   planner: Partial<Project['planner']>;
   log: SyncLogEntry[];
 }
@@ -233,6 +235,7 @@ export function applySync(p: Project, r: SyncResult): Project {
     const row = rows.find((x) => x.id === patch.id);
     if (row) Object.assign(row, patch.fields);
   }
+  if (r.members?.length) mergeMembers(next, r.members);
   next.planner = { ...next.planner, ...r.planner };
   next.syncLog = [...r.log.slice().reverse(), ...next.syncLog].slice(0, 500);
   return next;

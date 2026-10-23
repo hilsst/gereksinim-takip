@@ -41,6 +41,8 @@ function browserFallback(): Api {
     plannerPull: fail,
     flowPickFolder: async () => null,
     flowLastFolder: async () => null,
+    teamGet: async () => [],
+    teamSave: async () => undefined,
     flowStatus: fail,
     flowPush: fail,
     flowPull: fail,

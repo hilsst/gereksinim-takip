@@ -5,6 +5,7 @@ import path from 'node:path';
 import { buildWorkbook } from '../shared/excel';
 import { applyEvents, buildRequests, DONE_DIR, IN_DIR, OUT_DIR, type FlowEvent } from '../shared/flow';
 import { pullCompletions, pushAssignments } from '../shared/planner';
+import type { Member } from '../shared/model';
 import type { Project } from '../shared/types';
 import * as ai from './ai';
 import { Graph } from './graph';
@@ -25,6 +26,8 @@ interface Config {
   apiKeyEnc?: string;
   recent?: string[];
   lastFlowFolder?: string;
+  /** Projeler arası kayıtlı ekip (e-postaya göre tekil). */
+  team?: Member[];
 }
 
 function readConfig(): Config {
@@ -285,6 +288,13 @@ function registerIpc() {
     await flowDirs(r.filePaths[0]);
     writeConfig({ ...readConfig(), lastFlowFolder: r.filePaths[0] });
     return r.filePaths[0];
+  });
+  ipcMain.handle('team:get', () => readConfig().team ?? []);
+  ipcMain.handle('team:save', (_e, members: Member[]) => {
+    const c = readConfig();
+    const team = new Map((c.team ?? []).map((x) => [x.email.toLowerCase(), x]));
+    for (const m of members) if (m.email?.trim() && m.name?.trim()) team.set(m.email.trim().toLowerCase(), { name: m.name.trim(), email: m.email.trim(), discipline: m.discipline ?? '' });
+    writeConfig({ ...c, team: [...team.values()].sort((a, b) => a.name.localeCompare(b.name, 'tr')) });
   });
   ipcMain.handle('flow:lastFolder', () => {
     const f = readConfig().lastFlowFolder;

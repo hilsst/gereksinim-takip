@@ -31,7 +31,9 @@ export interface FlowRequest {
 
 /** Akışın gelen klasörüne yazdığı olay. */
 export interface FlowEvent {
-  olay: 'olusturuldu' | 'tamamlandi' | 'hata';
+  olay: 'olusturuldu' | 'tamamlandi' | 'hata' | 'uyeler';
+  /** "uyeler" olayı: Teams grubunun üyeleri. */
+  uyeler?: { ad?: string; eposta?: string; unvan?: string }[];
   kayitId?: string;
   gorevId?: string;
   baslik?: string;
@@ -134,6 +136,14 @@ export function applyEvents(p: Project, events: { name: string; event: FlowEvent
   for (const { name, event, error } of [...events].sort((a, b) => order(a.event) - order(b.event))) {
     if (!event) {
       result.log.push(log(`${name}: okunamadı – ${error ?? 'geçersiz JSON'}`, 'err'));
+      continue;
+    }
+    if (event.olay === 'uyeler') {
+      const members = (event.uyeler ?? []).map((u) => ({ name: u.ad ?? '', email: u.eposta ?? '', title: u.unvan ?? '' })).filter((m) => m.name && m.email);
+      result.members = [...(result.members ?? []), ...members];
+      const known = new Set(p.people.map((x) => x.email.toLocaleLowerCase('en')));
+      const fresh = members.filter((m) => !known.has(m.email.toLocaleLowerCase('en'))).length;
+      result.log.push(log(`Teams ekibinden ${members.length} üye okundu${fresh ? `, ${fresh} kişi Ekip listesine eklendi` : ''}`));
       continue;
     }
     const key = event.kayitId || idFromTitle(event.baslik);

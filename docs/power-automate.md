@@ -144,6 +144,23 @@ Uygulama bu dosyayı görünce satırdaki “Kuyrukta” işaretini kaldırır v
    - Dosya adı (ifade): `concat('tamamlandi_', triggerOutputs()?['body/id'], '.json')`
    - Dosya içeriği: *Oluştur → Çıkışlar*
 
+## Akış 3 · GT – Ekip üyeleri (isteğe bağlı)
+
+Teams ekibinin üyelerini uygulamanın **Ekip** listesine getirir. Kişiler bir kez gelince bilgisayarda saklanır ve yeni projelere otomatik eklenir; disiplin unvandan tahmin edilir (Tasarım / Konfigürasyon / İmalat), gerekirse elle düzeltilir.
+
+1. **Oluştur → Zamanlanmış bulut akışı (Scheduled cloud flow)**, ad `GT – Ekip üyeleri`, her 1 günde bir. Gerektiğinde akış sayfasındaki **Çalıştır** ile elle de çalışır.
+2. **Office 365 Grupları – Grup üyelerini listele (List group members)**, adı `Uyeler`. Grup kimliği: planın bağlı olduğu Teams ekibi (ör. Savunma/Havacılık).
+3. **Veri İşlemleri – Seç (Select)**, adı `Sec`.
+   - Kaynak: ifade `body('Uyeler')?['value']`
+   - Eşle (metin modu kapalıyken üç satır): `ad` → ifade `item()?['displayName']`, `eposta` → `item()?['mail']`, `unvan` → `item()?['jobTitle']`
+4. **Veri İşlemleri – Oluştur (Compose)**, adı `Liste`, giriş:
+
+```json
+{"olay":"uyeler","uyeler":"@body('Sec')"}
+```
+
+5. **OneDrive for Business – Dosya oluştur**: klasör `/GereksinimTakip/gelen`, dosya adı ifade `concat('uyeler_', utcNow('yyyyMMddHHmmss'), '.json')`, içerik *Liste → Çıkışlar*.
+
 ## Deneme
 
 1. Uygulamada bir gereksinime sorumlu ve miat verin, **Planner’a gönder** deyin. Satırın Planner kolonunda **Kuyrukta** yazar.

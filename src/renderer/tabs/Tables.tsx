@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isClosed, isOverdue, LISTS } from '../../shared/model';
+import { isClosed, isOverdue, LISTS, mergeMembers } from '../../shared/model';
 import type { AnyRow, Assignable, AssignableTable, DocumentRow } from '../../shared/types';
 import { api } from '../api';
 import { PasteDialog, useExtraction } from '../components/Ai';
@@ -144,10 +144,22 @@ export const RequirementsTab = () => <AssignableTab table="requirements" />;
 export const IssuesTab = () => <AssignableTab table="issues" />;
 
 export function PeopleTab() {
+  const { mutate, toast } = useStore();
+  const fromSaved = async () => {
+    const team = await api.teamGet();
+    if (!team.length) return toast('Kayıtlı ekip boş. Kişileri bir kez girdiğinizde sonraki projelere otomatik gelir.', 'warn');
+    let n = 0;
+    mutate((d) => void (n = mergeMembers(d, team)));
+    toast(n ? `${n} kişi kayıtlı ekipten eklendi` : 'Kayıtlı ekipteki herkes zaten listede');
+  };
   return (
     <>
       <div className="callout">
         Planner ataması kişinin <b>Microsoft 365 e-posta adresiyle</b> yapılır. Kişinin, seçtiğiniz planın bağlı olduğu Teams ekibinin üyesi olması gerekir.
+        Girdiğiniz kişiler bu bilgisayarda saklanır ve yeni projelere otomatik gelir. Teams ekibinin üyelerini almak için Power Automate'te <b>GT – Ekip üyeleri</b> akışını çalıştırın; üyeler bir sonraki kontrolde buraya eklenir.
+        <div style={{ marginTop: 8 }}>
+          <button className="btn" onClick={fromSaved}>Kayıtlı ekipten ekle</button>
+        </div>
       </div>
       <Grid table="people" emptyHint="Tasarım, konfigürasyon ve imalat mühendislerini ekleyin." />
     </>

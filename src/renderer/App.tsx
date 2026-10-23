@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { newProject } from '../shared/model';
+import { mergeMembers, newProject } from '../shared/model';
 import { sampleProject } from '../shared/sample';
 import { totals } from '../shared/summary';
 import type { Project } from '../shared/types';
@@ -28,6 +28,16 @@ async function withLastFolder(p: Project): Promise<Project> {
   if (p.planner.mode !== 'flow' || p.planner.flowFolder) return p;
   const f = await api.flowLastFolder();
   return f ? { ...p, planner: { ...p.planner, flowFolder: f } } : p;
+}
+
+// Yeni projeye kayıtlı ekibi koyar; ekip listesi her projede yeniden girilmez
+async function withTeam(p: Project): Promise<Project> {
+  if (p.people.length) return p;
+  const team = await api.teamGet();
+  if (!team.length) return p;
+  const next = structuredClone(p);
+  mergeMembers(next, team);
+  return next;
 }
 
 export function App() {
@@ -80,7 +90,7 @@ export function App() {
 
   const start = async (p: Project) => {
     if (!confirmDiscard()) return;
-    replace(await withLastFolder(p), undefined, false);
+    replace(await withTeam(await withLastFolder(p)), undefined, false);
     setWelcome(false);
     setTab('overview');
   };
@@ -112,6 +122,14 @@ export function App() {
     [open, save, exportExcel, undo, redo], // eslint-disable-line react-hooks/exhaustive-deps
   );
   useEffect(() => api.onOpenFile((p) => open(p)), [open]);
+  // Ekip değiştikçe kayıtlı ekibe yaz (örnek proje hariç)
+  useEffect(() => {
+    if (welcome || project.meta.code === 'DEMO') return;
+    const people = project.people.filter((x) => x.email && x.name);
+    if (!people.length) return;
+    const t = setTimeout(() => api.teamSave(people.map((x) => ({ name: x.name, email: x.email, discipline: x.discipline }))), 800);
+    return () => clearTimeout(t);
+  }, [project.people, welcome, project.meta.code]);
   useEffect(
     () =>
       api.onUpdate((s) => {

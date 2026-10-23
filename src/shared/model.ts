@@ -1,4 +1,4 @@
-import type { AnyRow, Assignable, IssueRow, PersonRow, Project, RequirementRow, TableKey } from './types';
+import type { AnyRow, Assignable, Discipline, IssueRow, PersonRow, Project, RequirementRow, TableKey } from './types';
 
 export const ID_PREFIX: Record<TableKey, string> = {
   documents: 'DOC',
@@ -153,4 +153,39 @@ export function closureFromDescription(desc: string): string {
 
 export function activePeople(p: Project, discipline?: string): PersonRow[] {
   return p.people.filter((x) => x.active && (!discipline || !x.discipline || x.discipline === discipline));
+}
+
+/** Ekip üyesi adayı (Teams grubundan veya kayıtlı ekipten). */
+export interface Member {
+  name: string;
+  email: string;
+  discipline?: string;
+  title?: string;
+}
+
+/** Unvandan disiplin tahmini: "Tasarım Mühendisi" → Tasarım. */
+export function disciplineFromTitle(title = ''): Discipline {
+  const t = title.toLocaleLowerCase('tr');
+  if (/tasar[ıi]m|design/.test(t)) return 'Tasarım';
+  if (/konfig[üu]rasyon|configuration/.test(t)) return 'Konfigürasyon';
+  if (/imalat|[üu]retim|manufactur|production/.test(t)) return 'İmalat';
+  return '';
+}
+
+/** Eksik kişileri e-postaya göre ekler; var olanların boş disiplinini doldurur. Eklenen sayısını döner. */
+export function mergeMembers(p: Project, members: Member[]): number {
+  let added = 0;
+  const key = (e: string) => e.trim().toLocaleLowerCase('en');
+  for (const m of members) {
+    if (!m.email?.trim() || !m.name?.trim()) continue;
+    const discipline = ((LISTS.discipline as string[]).includes(m.discipline ?? '') ? m.discipline : disciplineFromTitle(m.title)) as Discipline;
+    const hit = p.people.find((x) => key(x.email) === key(m.email));
+    if (hit) {
+      if (!hit.discipline && discipline) hit.discipline = discipline;
+      continue;
+    }
+    p.people.push({ ...(blankRow('people', nextId(p, 'people')) as PersonRow), name: m.name.trim(), email: m.email.trim(), discipline });
+    added++;
+  }
+  return added;
 }
