@@ -25,6 +25,7 @@ const comp = (key: string, label: string, compute: Col['compute'], width = 80, h
 const assignCols = (): Col[] => [
   sel('discipline', 'Disiplin', LISTS.discipline, 120),
   { key: 'assignee', label: 'Sorumlu', width: 150, type: 'person' },
+  { key: 'assignedAt', label: 'Atama Tarihi', width: 125, type: 'date' },
   { key: 'dueDate', label: 'Miat', width: 125, type: 'date' },
   sel('workStatus', 'Durum', LISTS.workStatus, 125, { help: 'Planner\'da görev tamamlanınca otomatik "Kapandı" olur' }),
   comp('late', 'Gecikme', (r) => (isOverdue(r as unknown as Assignable) ? 'Gecikmiş' : ''), 80),

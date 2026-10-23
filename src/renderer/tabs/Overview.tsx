@@ -1,11 +1,12 @@
 import { TextCell } from '../components/Cells';
+import { taskKey } from '../../shared/model';
 import { personSummary, totals } from '../../shared/summary';
 import type { ProjectMeta } from '../../shared/types';
 import { useStore } from '../store';
 import type { TabKey } from '../tabs';
 
 const META: [keyof ProjectMeta, string][] = [
-  ['name', 'Proje adı'], ['customer', 'Müşteri'], ['partNumber', 'Parça / montaj no'], ['partName', 'Parça adı'],
+  ['name', 'Proje adı'], ['code', 'Proje kodu (Planner)'], ['customer', 'Müşteri'], ['partNumber', 'Parça / montaj no'], ['partName', 'Parça adı'],
   ['program', 'Program'], ['drawingRevision', 'Resim revizyonu'], ['owner', 'Proje sorumlusu'], ['startDate', 'Başlangıç'],
 ];
 
@@ -42,7 +43,10 @@ export function OverviewTab({ go }: { go: (t: TabKey) => void }) {
           <div className="form">
             {META.map(([k, l]) => (
               <label key={k}>
-                <span>{l}</span>
+                <span>
+                  {l}
+                  {k === 'code' && <small className="muted"> · görev başlığı: {taskKey(project, { id: 'REQ-001' })}</small>}
+                </span>
                 <TextCell value={project.meta[k]} type={k === 'startDate' ? 'date' : 'text'} onCommit={(v) => setMeta(k, v)} />
               </label>
             ))}

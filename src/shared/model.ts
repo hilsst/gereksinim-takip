@@ -30,7 +30,7 @@ export const LISTS = {
 export const NO_DATA = 'VERİ YOK – doğrulanmalı';
 
 const assignBlank = (): Assignable => ({
-  discipline: '', assignee: '', dueDate: '', workStatus: 'Atanmadı',
+  discipline: '', assignee: '', dueDate: '', assignedAt: '', workStatus: 'Atanmadı',
   plannerTaskId: '', plannerSyncedAt: '', plannerEtag: '', closedAt: '', closedBy: '', closureNote: '',
 });
 
@@ -60,7 +60,7 @@ export function nextId(p: Project, table: TableKey): string {
 export function newProject(): Project {
   return {
     schema: 'gereksinim-takip/1',
-    meta: { name: '', partNumber: '', partName: '', customer: '', program: '', drawingRevision: '', owner: '', startDate: new Date().toISOString().slice(0, 10), scope: '', confidentiality: '' },
+    meta: { name: '', code: '', partNumber: '', partName: '', customer: '', program: '', drawingRevision: '', owner: '', startDate: new Date().toISOString().slice(0, 10), scope: '', confidentiality: '' },
     planner: { mode: 'flow', flowFolder: '', clientId: '', tenantId: '', planId: '', planTitle: '', buckets: {}, pollMinutes: 5, lastSync: '' },
     documents: [],
     requirements: [],
@@ -97,14 +97,32 @@ export function personName(p: Project, id: string): string {
   return p.people.find((x) => x.id === id)?.name || id;
 }
 
-/** Planner görev başlığı: "REQ-012 · Gereksinim metni" (Planner 255 karakter sınırı). */
-export function taskTitle(r: RequirementRow | IssueRow): string {
-  const text = 'text' in r ? r.text : r.description;
-  const s = `${r.id} · ${text.replace(/\s+/g, ' ').trim()}`;
-  return s.length > 250 ? `${s.slice(0, 247)}…` : s;
+/** Proje kodu: elle girilen kod, yoksa proje adının başındaki numara ("1522 Projesi" → "1522"). */
+export function projectCode(p: Project): string {
+  const c = p.meta.code?.trim();
+  if (c) return c.replace(/\s+/g, '-');
+  const first = p.meta.name.trim().split(/\s+/)[0] ?? '';
+  return /\d/.test(first) ? first : '';
 }
 
-/** Planner açıklamasında bu satırın altı kapanış açıklaması olarak alınır. */
+/** Projeler arasında tekil kayıt anahtarı ve Planner görev başlığı: "1522-REQ-001" (kod yoksa "REQ-001"). */
+export function taskKey(p: Project, r: { id: string }): string {
+  const code = projectCode(p);
+  return code ? `${code}-${r.id}` : r.id;
+}
+export const taskTitle = taskKey;
+
+/** Planner denetim listesi maddesi: gereksinimin kendisi (Planner sınırı 100 karakter, tam metin açıklamada). */
+export function checklistTitle(r: RequirementRow | IssueRow): string {
+  const s = ('text' in r ? r.text : r.description).replace(/\s+/g, ' ').trim();
+  return s.length > 100 ? `${s.slice(0, 99)}…` : s;
+}
+
+/** Planner başlangıç tarihi: atama günü (eski kayıtlarda bugün). */
+export function startDateOf(r: Assignable): string {
+  return r.assignedAt || new Date().toISOString().slice(0, 10);
+}
+
 export const CLOSURE_MARK = '──── Kapanış açıklamasını bu çizginin altına yazın ────';
 
 export function taskDescription(p: Project, r: RequirementRow | IssueRow): string {

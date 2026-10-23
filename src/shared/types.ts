@@ -24,6 +24,8 @@ export interface Assignable {
   /** Ekip tablosundaki kişi ID'si (P-001). */
   assignee: string;
   dueDate: string;
+  /** Sorumlunun atandığı gün (YYYY-MM-DD); Planner başlangıç tarihi olur. */
+  assignedAt: string;
   workStatus: WorkStatus;
   plannerTaskId: string;
   plannerSyncedAt: string;
@@ -37,6 +39,8 @@ export interface Assignable {
 
 export interface ProjectMeta {
   name: string;
+  /** Planner görev başlığındaki proje kodu (1522 → 1522-REQ-001). Boşsa proje adının başındaki numara kullanılır. */
+  code: string;
   partNumber: string;
   partName: string;
   customer: string;

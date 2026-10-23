@@ -11,6 +11,10 @@ GereksinimTakip/
 
 Aşağıda bağlayıcı ve eylem adları önce Türkçe arayüzdeki, parantez içinde İngilizce arayüzdeki adlarıyla verilmiştir.
 
+## Görev başlığı
+
+Görev başlığı proje kodu ile kayıt kimliğinden oluşur: `1522-REQ-001`. Proje kodu **Özet → Proje kodu** alanından gelir; boşsa proje adının başındaki numara kullanılır. Böylece aynı plan ve aynı klasör birden çok projede kullanılabilir: uygulama yalnızca kendi kodunu taşıyan dosyaları işler, diğerlerini o projeyi açana bırakır. Gereksinim metni görevin denetim listesinde, ayrıntıları açıklamada yer alır.
+
 ## 0. Hazırlık
 
 1. OneDrive’ınızda (veya ekibin SharePoint kitaplığında) `GereksinimTakip` klasörü oluşturun ve bilgisayarınızla senkron olduğundan emin olun.
@@ -41,6 +45,8 @@ Aşağıda bağlayıcı ve eylem adları önce Türkçe arayüzdeki, parantez i�
     "gorevId": { "type": "string" },
     "baslik": { "type": "string" },
     "aciklama": { "type": "string" },
+    "kontrolListesi": { "type": "string" },
+    "baslangicTarihi": { "type": "string" },
     "bitisTarihi": { "type": "string" },
     "sorumluEposta": { "type": "string" },
     "kova": { "type": "string" },
@@ -62,11 +68,14 @@ Aşağıda bağlayıcı ve eylem adları önce Türkçe arayüzdeki, parantez i�
    - Grup kimliği, Plan kimliği: planınız
    - Başlık: `baslik`
    - Demet kimliği (özel değer girin, ifade): `first(body('Diziyi_filtrele'))?['id']`
+   - Başlangıç Tarihi: `baslangicTarihi` (atama günü)
    - Bitiş Tarihi: `bitisTarihi`
    - Atanan kullanıcı kimlikleri: `sorumluEposta`
 4. **Planner – Görev ayrıntılarını güncelleştir (Update task details)**
    - Görev kimliği: *Görev oluştur → Kimlik (Id)*
    - Açıklama: `aciklama`
+   - Kontrol listesi öğeleri → **Yeni öğe ekle**: Kimlik `1`, Başlık `kontrolListesi` (gereksinim metni, en çok 100 karakter), İşaretli `Hayır`
+   - Önizleme türü: `Kontrol listesi` (kartta gereksinim görünür)
 5. **Veri İşlemleri – Oluştur (Compose)**, giriş:
 
 ```json
@@ -111,7 +120,7 @@ Uygulama bu dosyayı görünce satırdaki “Kuyrukta” işaretini kaldırır v
 - Grup kimliği, Plan kimliği: planınız
 
 ### 2. Koşul (Condition)
-- İfade: `or(startsWith(triggerOutputs()?['body/title'], 'REQ-'), startsWith(triggerOutputs()?['body/title'], 'ISS-'))` **eşittir** `true`
+- İfade: `or(contains(triggerOutputs()?['body/title'], 'REQ-'), contains(triggerOutputs()?['body/title'], 'ISS-'))` **eşittir** `true`
 - Hayır dalı boş kalır. Böylece plandaki başka görevler uygulamaya gelmez.
 
 ### 3. Evet ise

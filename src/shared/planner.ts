@@ -1,6 +1,6 @@
 // Teams Planner senkron mantığı. Graph çağrıları GraphLike arayüzü üzerinden yapılır;
 // böylece kurallar ağ olmadan test edilebilir. Fonksiyonlar projeyi değiştirmez, uygulanacak yamaları döner.
-import { closureFromDescription, isClosed, LISTS, personName, taskDescription, taskTitle } from './model';
+import { checklistTitle, closureFromDescription, isClosed, LISTS, personName, startDateOf, taskDescription, taskTitle } from './model';
 import type { Assignable, AssignableTable, IssueRow, PersonRow, Project, RequirementRow, SyncLogEntry } from './types';
 
 export interface PlannerTask {
@@ -10,6 +10,7 @@ export interface PlannerTask {
   bucketId: string;
   percentComplete: number;
   dueDateTime: string | null;
+  startDateTime?: string | null;
   completedDateTime: string | null;
   completedBy: { user?: { id?: string; displayName?: string } } | null;
   assignments: Record<string, unknown>;
@@ -60,6 +61,9 @@ function rowsOf(p: Project): { table: AssignableTable; row: Row }[] {
   ];
 }
 
+/** Denetim listesindeki gereksinim maddesinin sabit kimliği (görev başına tek madde). */
+export const CHECKLIST_ID = '6a1f0c4e-9b2d-4e7a-8c31-5d0e2f7b9a10';
+
 /** Atanmış satırları Planner'a gönderir: yeni görev açar veya mevcut görevin başlık/miat/kişi/kovasını günceller. */
 export async function pushAssignments(g: GraphLike, p: Project, ids: string[]): Promise<SyncResult> {
   const res: SyncResult = { patches: [], planner: {}, log: [] };
@@ -107,8 +111,9 @@ export async function pushAssignments(g: GraphLike, p: Project, ids: string[]): 
       if (!row.dueDate) throw new Error('miat girilmemiş');
       const uid = await userId(person);
       const bid = await bucketId(row.discipline);
-      const title = taskTitle(row);
+      const title = taskTitle(p, row);
       const due = toPlannerDate(row.dueDate);
+      const start = toPlannerDate(startDateOf(row));
 
       if (!row.plannerTaskId) {
         const t = await g.post<PlannerTask>('/planner/tasks', {
@@ -116,10 +121,15 @@ export async function pushAssignments(g: GraphLike, p: Project, ids: string[]): 
           bucketId: bid,
           title,
           dueDateTime: due,
+          startDateTime: start,
           assignments: { [uid]: { '@odata.type': '#microsoft.graph.plannerAssignment', orderHint: ' !' } },
         });
         const det = await g.get<{ '@odata.etag': string }>(`/planner/tasks/${t.id}/details`);
-        await g.patch(`/planner/tasks/${t.id}/details`, { description: taskDescription(p, row), previewType: 'description' }, det['@odata.etag']);
+        await g.patch(`/planner/tasks/${t.id}/details`, {
+          description: taskDescription(p, row),
+          previewType: 'checklist',
+          checklist: { [CHECKLIST_ID]: { '@odata.type': 'microsoft.graph.plannerChecklistItem', title: checklistTitle(row), isChecked: false } },
+        }, det['@odata.etag']);
         res.patches.push({ table, id: row.id, fields: { plannerTaskId: t.id, plannerEtag: t['@odata.etag'], plannerSyncedAt: now(), workStatus: 'Atandı' } });
         res.log.push(log(`${row.id} → ${person.name} için Planner görevi açıldı (miat ${row.dueDate})`));
         continue;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLOSURE_MARK } from '../src/shared/model';
+import { CLOSURE_MARK, projectCode, taskKey } from '../src/shared/model';
 import { applyEvents, buildRequests, idFromTitle, QUEUED, type FlowRequest } from '../src/shared/flow';
 import { applySync } from '../src/shared/planner';
 import { sampleProject } from '../src/shared/sample';
@@ -7,12 +7,14 @@ import { sampleProject } from '../src/shared/sample';
 describe('Power Automate modu', () => {
   it('atanmış satır için istek dosyası üretir ve satırı kuyruğa alır', () => {
     const p = sampleProject();
+    p.requirements[0].assignedAt = '2026-10-20';
     const { files, result } = buildRequests(p, ['REQ-001', 'REQ-004']);
     expect(files).toHaveLength(1);
     expect(files[0].name).toMatch(/^GT_REQ-001_\d{14}\.json$/);
     const req = JSON.parse(files[0].content) as FlowRequest;
-    expect(req).toMatchObject({ islem: 'olustur', kayitId: 'REQ-001', gorevId: '', sorumluEposta: 'ayse.demir@ornek.com', kova: 'Tasarım', bitisTarihi: '2026-11-05T12:00:00Z' });
+    expect(req).toMatchObject({ islem: 'olustur', kayitId: 'DEMO-REQ-001', baslik: 'DEMO-REQ-001', baslangicTarihi: '2026-10-20T12:00:00Z', gorevId: '', sorumluEposta: 'ayse.demir@ornek.com', kova: 'Tasarım', bitisTarihi: '2026-11-05T12:00:00Z' });
     expect(req.aciklama).toContain(CLOSURE_MARK);
+    expect(req.kontrolListesi).toBe(p.requirements[0].text.length > 100 ? p.requirements[0].text.slice(0, 99) + '…' : p.requirements[0].text);
     expect(result.log.some((l) => l.kind === 'err' && l.text.startsWith('REQ-004'))).toBe(true);
     const next = applySync(p, result);
     expect(next.requirements[0].plannerEtag).toBe(QUEUED);
@@ -66,7 +68,23 @@ describe('Power Automate modu', () => {
     expect(applySync(p, r).requirements[0].plannerEtag).toBe('');
   });
 
+  it('proje kodu başlıkta yer alır; başka projenin dosyası klasörde bırakılır', () => {
+    const p = sampleProject();
+    p.meta.code = '';
+    p.meta.name = '1522 Projesi';
+    expect(projectCode(p)).toBe('1522');
+    expect(taskKey(p, p.requirements[0])).toBe('1522-REQ-001');
+    const r = applyEvents(p, [
+      { name: 'diger.json', event: { olay: 'tamamlandi', gorevId: 'T-1', baslik: '1600-REQ-001', aciklama: 'x' } },
+      { name: 'bizim.json', event: { olay: 'tamamlandi', gorevId: 'T-2', baslik: '1522-REQ-001', aciklama: 'tamam' } },
+    ]);
+    expect(r.keep).toEqual(['diger.json']);
+    expect(applySync(p, r).requirements[0]).toMatchObject({ workStatus: 'Kapandı', plannerTaskId: 'T-2', closureNote: 'tamam' });
+  });
+
   it('başlıktan kimlik okur', () => {
+    expect(idFromTitle('1522-REQ-012')).toBe('1522-REQ-012');
+    expect(idFromTitle('ASM-1001-ISS-003')).toBe('ASM-1001-ISS-003');
     expect(idFromTitle('REQ-012 · Kütle')).toBe('REQ-012');
     expect(idFromTitle('Başka görev')).toBe('');
   });

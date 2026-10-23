@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closureFromDescription, CLOSURE_MARK, taskDescription } from '../src/shared/model';
+import { checklistTitle, closureFromDescription, CLOSURE_MARK, taskDescription } from '../src/shared/model';
 import { applySync, GraphError, pullCompletions, pushAssignments, type GraphLike, type PlannerTask } from '../src/shared/planner';
 import { sampleProject } from '../src/shared/sample';
 import { personSummary, totals } from '../src/shared/summary';
@@ -7,7 +7,7 @@ import { personSummary, totals } from '../src/shared/summary';
 /** Bellek içi Planner: istekleri kaydeder, görevleri tutar. */
 function fakeGraph() {
   const tasks = new Map<string, PlannerTask>();
-  const details = new Map<string, { description: string; '@odata.etag': string }>();
+  const details = new Map<string, { description: string; checklist?: Record<string, { title: string; isChecked: boolean }>; '@odata.etag': string }>();
   const buckets: { id: string; name: string }[] = [{ id: 'B-TAS', name: 'Tasarım' }];
   const calls: string[] = [];
   let n = 0;
@@ -45,7 +45,7 @@ function fakeGraph() {
         return bk as T;
       }
       const id = `T-${++n}`;
-      const task: PlannerTask = { id, title: String(b.title), planId: String(b.planId), bucketId: String(b.bucketId), percentComplete: 0, dueDateTime: b.dueDateTime as string, completedDateTime: null, completedBy: null, assignments: b.assignments as Record<string, unknown>, '@odata.etag': 'W/1' };
+      const task: PlannerTask = { id, title: String(b.title), planId: String(b.planId), bucketId: String(b.bucketId), percentComplete: 0, dueDateTime: b.dueDateTime as string, startDateTime: b.startDateTime as string, completedDateTime: null, completedBy: null, assignments: b.assignments as Record<string, unknown>, '@odata.etag': 'W/1' };
       tasks.set(id, task);
       return task as T;
     },
@@ -53,7 +53,7 @@ function fakeGraph() {
       calls.push(`PATCH ${path}`);
       const d = path.match(/^\/planner\/tasks\/([^/]+)\/details$/);
       if (d) {
-        details.set(d[1], { description: String((body as { description: string }).description), '@odata.etag': 'e1' });
+        details.set(d[1], { ...(body as { description: string }), description: String((body as { description: string }).description), '@odata.etag': 'e1' });
         return null;
       }
       const t = tasks.get(path.split('/').pop()!)!;
@@ -88,7 +88,9 @@ describe('Planner gönderimi', () => {
     expect(row.workStatus).toBe('Atandı');
     const task = f.tasks.get(row.plannerTaskId)!;
     expect(task.bucketId).toBe('B-TAS');
-    expect(task.title.startsWith('REQ-001 · ')).toBe(true);
+    expect(task.title).toBe('DEMO-REQ-001');
+    expect(task.startDateTime).toMatch(/^\d{4}-\d{2}-\d{2}T12:00:00Z$/);
+    expect(Object.values(f.details.get(task.id)!.checklist ?? {})[0]).toMatchObject({ title: checklistTitle(p.requirements[0]), isChecked: false });
     expect(task.dueDateTime).toBe('2026-11-05T12:00:00Z');
     expect(Object.keys(task.assignments)).toEqual(['aad-ayse.demir@ornek.com']);
     expect(f.details.get(task.id)!.description).toContain(CLOSURE_MARK);

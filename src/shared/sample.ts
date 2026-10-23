@@ -4,7 +4,7 @@ import type { DocumentRow, IssueRow, PersonRow, Project, RequirementRow } from '
 
 export function sampleProject(): Project {
   const p = newProject();
-  p.meta = { ...p.meta, name: 'Kapak montajı', customer: 'Örnek Müşteri', partNumber: 'ASM-1001', partName: 'Ön kapak montajı', program: 'Demo', drawingRevision: 'B', owner: 'Kemal' };
+  p.meta = { ...p.meta, name: 'Kapak montajı', code: 'DEMO', customer: 'Örnek Müşteri', partNumber: 'ASM-1001', partName: 'Ön kapak montajı', program: 'Demo', drawingRevision: 'B', owner: 'Kemal' };
   const doc = (id: string, f: Partial<DocumentRow>) => p.documents.push({ ...(blankRow('documents', id) as DocumentRow), ...f });
   const req = (id: string, f: Partial<RequirementRow>) => p.requirements.push({ ...(blankRow('requirements', id) as RequirementRow), approval: 'AI Proposed', dataStatus: 'Dokümandan (kaynaklı)', ...f });
   const iss = (id: string, f: Partial<IssueRow>) => p.issues.push({ ...(blankRow('issues', id) as IssueRow), ...f });

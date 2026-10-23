@@ -25,6 +25,7 @@ export function AssignDialog({ table, ids, onClose }: { table: AssignableTable; 
       for (const r of d[table] as unknown as (Assignable & { id: string })[]) {
         if (!ids.includes(r.id) || isClosed(r)) continue;
         if (discipline) r.discipline = discipline;
+        if (assignee && (assignee !== r.assignee || !r.assignedAt)) r.assignedAt = new Date().toISOString().slice(0, 10);
         if (assignee) r.assignee = assignee;
         if (dueDate) r.dueDate = dueDate;
         if (r.assignee && r.workStatus === 'Atanmadı') r.workStatus = 'Atandı';

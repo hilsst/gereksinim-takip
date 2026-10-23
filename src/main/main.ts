@@ -315,7 +315,8 @@ function registerIpc() {
       }
     }
     const result = applyEvents(a.project, events);
-    for (const name of names) await fs.rename(path.join(d.in, name), path.join(d.done, name)).catch(() => undefined);
+    const keep = new Set(result.keep);
+    for (const name of names.filter((n) => !keep.has(n))) await fs.rename(path.join(d.in, name), path.join(d.done, name)).catch(() => undefined);
     return result;
   }));
 }

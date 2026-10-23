@@ -1,7 +1,7 @@
 // Power Automate modu: uygulama ile Planner arasındaki alışveriş OneDrive/SharePoint ile senkron bir klasördeki
 // JSON dosyalarıyla yapılır. "giden" klasörüne uygulama yazar, akış okur; "gelen" klasörüne akış yazar, uygulama okur.
 // Azure uygulama kaydı ve Premium lisans gerekmez. Bu dosya yalnızca kuralları içerir; dosya işlemleri ana süreçtedir.
-import { closureFromDescription, isClosed, personName, taskDescription, taskTitle } from './model';
+import { checklistTitle, closureFromDescription, isClosed, personName, projectCode, startDateOf, taskDescription, taskKey, taskTitle } from './model';
 import { toPlannerDate, type RowPatch, type SyncResult } from './planner';
 import type { AssignableTable, IssueRow, Project, RequirementRow, SyncLogEntry } from './types';
 
@@ -15,10 +15,14 @@ export const QUEUED = 'flow:kuyrukta';
 export interface FlowRequest {
   kaynak: 'gereksinim-takip';
   islem: 'olustur' | 'guncelle';
+  /** Projeler arasında tekil anahtar: "1522-REQ-001". */
   kayitId: string;
   gorevId: string;
   baslik: string;
   aciklama: string;
+  /** Denetim listesi maddesi: gereksinim metni (en çok 100 karakter). */
+  kontrolListesi: string;
+  baslangicTarihi: string;
   bitisTarihi: string;
   sorumluEposta: string;
   kova: string;
@@ -46,9 +50,15 @@ function rowsOf(p: Project): { table: AssignableTable; row: Row }[] {
   return [...p.requirements.map((row) => ({ table: 'requirements' as const, row })), ...p.issues.map((row) => ({ table: 'issues' as const, row }))];
 }
 
-/** "REQ-012 · …" başlığından kayıt kimliğini okur. */
+/** "1522-REQ-012" veya eski biçim "REQ-012 · …" başlığından kayıt anahtarını okur. */
 export function idFromTitle(title: string | undefined): string {
-  return title?.match(/^\s*((?:REQ|ISS)-\d+)/)?.[1] ?? '';
+  return title?.match(/^\s*((?:\S*?-)?(?:REQ|ISS)-\d+)/)?.[1] ?? '';
+}
+
+/** Anahtarı proje koduna ve kayıt kimliğine ayırır: "1522-REQ-001" → { code: "1522", id: "REQ-001" }. */
+export function splitKey(key: string): { code: string; id: string } {
+  const m = key.match(/^(?:(.*)-)?((?:REQ|ISS)-\d+)$/);
+  return m ? { code: m[1] ?? '', id: m[2] } : { code: '', id: key };
 }
 
 export function buildRequests(p: Project, ids: string[]): { files: { name: string; content: string }[]; result: SyncResult } {
@@ -79,10 +89,12 @@ export function buildRequests(p: Project, ids: string[]): { files: { name: strin
     const req: FlowRequest = {
       kaynak: 'gereksinim-takip',
       islem: row.plannerTaskId ? 'guncelle' : 'olustur',
-      kayitId: row.id,
+      kayitId: taskKey(p, row),
       gorevId: row.plannerTaskId,
-      baslik: taskTitle(row),
+      baslik: taskTitle(p, row),
       aciklama: taskDescription(p, row),
+      kontrolListesi: checklistTitle(row),
+      baslangicTarihi: toPlannerDate(startDateOf(row))!,
       bitisTarihi: toPlannerDate(row.dueDate)!,
       sorumluEposta: person.email,
       kova: row.discipline || 'Genel',
@@ -97,9 +109,18 @@ export function buildRequests(p: Project, ids: string[]): { files: { name: strin
   return { files, result };
 }
 
-/** Gelen klasöründeki olayları satırlara uygular. Tanınmayan dosyalar günlüğe yazılır, uygulama bozulmaz. */
-export function applyEvents(p: Project, events: { name: string; event: FlowEvent | null; error?: string }[]): SyncResult {
-  const result: SyncResult = { patches: [], planner: { lastSync: now() }, log: [] };
+/**
+ * Gelen klasöründeki olayları satırlara uygular. Tanınmayan dosyalar günlüğe yazılır, uygulama bozulmaz.
+ * Başka projenin kodunu taşıyan dosyalar "keep" listesinde döner ve klasörde bırakılır (o projeyi açan alır).
+ */
+export function applyEvents(p: Project, events: { name: string; event: FlowEvent | null; error?: string }[]): SyncResult & { keep: string[] } {
+  const result: SyncResult & { keep: string[] } = { patches: [], planner: { lastSync: now() }, log: [], keep: [] };
+  const code = projectCode(p);
+  /** Anahtar bu projeye mi ait? Kodsuz eski anahtarlar her projede kimlikle eşleşir. */
+  const ours = (key: string) => {
+    const k = splitKey(key);
+    return !k.code || k.code === code ? k.id : null;
+  };
   const all = rowsOf(p);
   const pending = new Map<string, Record<string, unknown>>();
   const patch = (table: AssignableTable, id: string, fields: Record<string, unknown>) => {
@@ -115,17 +136,22 @@ export function applyEvents(p: Project, events: { name: string; event: FlowEvent
       result.log.push(log(`${name}: okunamadı – ${error ?? 'geçersiz JSON'}`, 'err'));
       continue;
     }
+    const key = event.kayitId || idFromTitle(event.baslik);
+    const byId = event.gorevId ? taskOf.get(event.gorevId) : undefined;
+    const kid = key ? ours(key) : '';
+    if (!byId && kid === null) {
+      result.keep.push(name);
+      continue;
+    }
     if (event.olay === 'hata') {
       result.log.push(log(`Power Automate hatası${event.kayitId ? ` (${event.kayitId})` : ''}: ${event.mesaj ?? name}`, 'err'));
-      const hit = all.find((x) => x.row.id === event.kayitId);
+      const hit = all.find((x) => x.row.id === kid);
       if (hit && !hit.row.plannerTaskId) patch(hit.table, hit.row.id, { plannerEtag: '' });
       continue;
     }
-    const byId = event.gorevId ? taskOf.get(event.gorevId) : undefined;
-    const kid = event.kayitId || idFromTitle(event.baslik);
     const hit = byId ?? all.find((x) => x.row.id === kid);
     if (!hit) {
-      result.log.push(log(`${name}: eşleşen gereksinim/açık konu bulunamadı (${kid || event.gorevId || 'kimlik yok'})`, 'warn'));
+      result.log.push(log(`${name}: eşleşen gereksinim/açık konu bulunamadı (${key || event.gorevId || 'kimlik yok'})`, 'warn'));
       continue;
     }
     const { table, row } = hit;
@@ -164,5 +190,5 @@ export function applyEvents(p: Project, events: { name: string; event: FlowEvent
 /** Akış kurulum tarifinde kullanılan Parse JSON şemaları. */
 export const REQUEST_SCHEMA = {
   type: 'object',
-  properties: Object.fromEntries(['kaynak', 'islem', 'kayitId', 'gorevId', 'baslik', 'aciklama', 'bitisTarihi', 'sorumluEposta', 'kova', 'proje'].map((k) => [k, { type: 'string' }])),
+  properties: Object.fromEntries(['kaynak', 'islem', 'kayitId', 'gorevId', 'baslik', 'aciklama', 'kontrolListesi', 'baslangicTarihi', 'bitisTarihi', 'sorumluEposta', 'kova', 'proje'].map((k) => [k, { type: 'string' }])),
 };

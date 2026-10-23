@@ -68,7 +68,7 @@ await win.click(".grid-toolbar >> text=Planner'a gönder");
 await win.waitForSelector('[data-row="REQ-001"] td.c-planner >> text=Kuyrukta');
 const outFiles = fs.readdirSync(path.join(flowDir, 'giden'));
 const request = JSON.parse(fs.readFileSync(path.join(flowDir, 'giden', outFiles[0]), 'utf8'));
-fs.writeFileSync(path.join(flowDir, 'gelen', 'olusturuldu_REQ-001.json'), JSON.stringify({ olay: 'olusturuldu', kayitId: 'REQ-001', gorevId: 'T-1' }));
+fs.writeFileSync(path.join(flowDir, 'gelen', 'olusturuldu_REQ-001.json'), JSON.stringify({ olay: 'olusturuldu', kayitId: request.kayitId, gorevId: 'T-1' }));
 fs.writeFileSync(path.join(flowDir, 'gelen', 'tamamlandi_T-1.json'), '\uFEFF' + JSON.stringify({ olay: 'tamamlandi', gorevId: 'T-1', baslik: request.baslik, aciklama: request.aciklama + 'Kütle 2.31 kg ölçüldü.', tamamlanmaTarihi: '2026-11-01T08:00:00Z' }));
 await nav('Teams Planner');
 await win.click('button:has-text("Şimdi kontrol et")');

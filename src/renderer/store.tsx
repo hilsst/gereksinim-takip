@@ -69,7 +69,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutate((d) => {
         const row = (d[table] as unknown as Record<string, unknown>[]).find((r) => r.id === id);
         if (!row) return;
+        const before = row[field];
         row[field] = value;
+        // Yeni sorumlu atandığında atama günü Planner başlangıç tarihi olur
+        if (field === 'assignee' && value && value !== before) row.assignedAt = new Date().toISOString().slice(0, 10);
         // Elle kapatma: kapanış tarihi; yeniden açma: kapanış bilgisi temizlenir.
         if (field === 'workStatus') {
           if (value === 'Kapandı' && !row.closedAt) row.closedAt = new Date().toISOString();
