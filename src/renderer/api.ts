@@ -40,6 +40,7 @@ function browserFallback(): Api {
     plannerPush: fail,
     plannerPull: fail,
     flowPickFolder: async () => null,
+    flowLastFolder: async () => null,
     flowStatus: fail,
     flowPush: fail,
     flowPull: fail,

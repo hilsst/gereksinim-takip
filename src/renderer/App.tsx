@@ -23,6 +23,13 @@ function navCount(p: Project, key: TabKey): { n: number | string; tone?: string 
   }
 }
 
+// Power Automate klasörü seçilmemiş projelere son seçilen klasörü verir; her projede yeniden seçmek gerekmez
+async function withLastFolder(p: Project): Promise<Project> {
+  if (p.planner.mode !== 'flow' || p.planner.flowFolder) return p;
+  const f = await api.flowLastFolder();
+  return f ? { ...p, planner: { ...p.planner, flowFolder: f } } : p;
+}
+
 export function App() {
   const { project, filePath, dirty, replace, setPath, markSaved, toast, toasts, undo, redo } = useStore();
   const planner = usePlanner();
@@ -61,7 +68,7 @@ export function App() {
       try {
         const r = await api.openProject(file);
         if (!r) return;
-        replace(r.data, r.path);
+        replace(await withLastFolder(r.data), r.path);
         setWelcome(false);
         setTab('overview');
       } catch (e) {
@@ -71,9 +78,9 @@ export function App() {
     [dirty, replace, toast], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const start = (p: Project) => {
+  const start = async (p: Project) => {
     if (!confirmDiscard()) return;
-    replace(p, undefined, false);
+    replace(await withLastFolder(p), undefined, false);
     setWelcome(false);
     setTab('overview');
   };

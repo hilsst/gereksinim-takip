@@ -24,6 +24,7 @@ const CONFIG = () => userFile('config.json');
 interface Config {
   apiKeyEnc?: string;
   recent?: string[];
+  lastFlowFolder?: string;
 }
 
 function readConfig(): Config {
@@ -282,7 +283,12 @@ function registerIpc() {
     const r = await dialog.showOpenDialog(win!, { title: 'OneDrive / SharePoint ile senkron klasör', properties: ['openDirectory', 'createDirectory'] });
     if (r.canceled || !r.filePaths[0]) return null;
     await flowDirs(r.filePaths[0]);
+    writeConfig({ ...readConfig(), lastFlowFolder: r.filePaths[0] });
     return r.filePaths[0];
+  });
+  ipcMain.handle('flow:lastFolder', () => {
+    const f = readConfig().lastFlowFolder;
+    return f && fssync.existsSync(f) ? f : null;
   });
   ipcMain.handle('flow:status', wrap(async (root: string) => {
     const d = await flowDirs(root);
