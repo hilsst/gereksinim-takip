@@ -8,7 +8,7 @@ import mammoth from 'mammoth';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-type Block = Anthropic.Beta.BetaContentBlockParam;
+type Block = Anthropic.ContentBlockParam;
 type Json = Record<string, unknown>;
 
 export const SUPPORTED = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'docx', 'xlsx', 'xlsm', 'csv', 'txt', 'md', 'eml', 'msg', 'htm', 'html'];

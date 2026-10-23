@@ -3,7 +3,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { fileBlocks } from './sources';
 
-const MODEL = 'claude-opus-5-5';
+// Haiku: yüksek hacimli çıkarma işi için hızlı ve düşük maliyetli. Haiku'da sunucu tarafı yedek model (fallbacks) yoktur.
+const MODEL = 'claude-haiku-5-5';
 
 const SYSTEM = `Sen deneyimli bir sistem / tasarım / kalite mühendisisin (havacılık, savunma, otomotiv, raylı sistemler; kompozit ve mekanik ürünler). Görevin müşteri dokümanlarından doğrulanabilir bir gereksinim listesi çıkarmak.
 Kesin kurallar:
@@ -53,13 +54,11 @@ export const REQ_SCHEMA = obj({
   },
 });
 
-async function ask(cfg: AiConfig, content: Anthropic.Beta.BetaContentBlockParam[], schema: Json): Promise<Json> {
-  const res = await client(cfg).beta.messages.create({
+async function ask(cfg: AiConfig, content: Anthropic.ContentBlockParam[], schema: Json): Promise<Json> {
+  const res = await client(cfg).messages.create({
     model: MODEL,
     max_tokens: 32000,
     system: SYSTEM,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
     output_config: { effort: 'high', format: { type: 'json_schema', schema } },
     messages: [{ role: 'user', content }],
   }, { timeout: 15 * 60 * 1000 });
@@ -70,7 +69,7 @@ async function ask(cfg: AiConfig, content: Anthropic.Beta.BetaContentBlockParam[
 }
 
 export async function extractRequirements(cfg: AiConfig, input: { filePath?: string; text?: string; docId: string; docLabel: string; existing: string[] }) {
-  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  const content: Anthropic.ContentBlockParam[] = [];
   if (input.filePath) content.push(...(await fileBlocks(input.filePath)));
   if (input.text) content.push({ type: 'text', text: input.text });
   content.push({

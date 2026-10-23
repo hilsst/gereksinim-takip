@@ -54,7 +54,7 @@ Giriş kişinin kendi hesabıyla yapılır (delegated); token işletim sistemini
 
 - Proje dosyası: `.greq` (JSON). Kayıt önce geçici dosyaya yazılıp sonra yeniden adlandırılır; ortak ağ klasöründe yarım dosya kalmaz.
 - **Excel raporu**: Özet (kişi bazında), Gereksinimler, Açık Konular, Dokümanlar, Ekip, Planner Günlüğü.
-- AI çıkarma dokümanları Anthropic API’sine gönderir; anahtar **Ayarlar**’dan girilir veya `ANTHROPIC_API_KEY` ortam değişkeni kullanılır.
+- AI çıkarma **Claude Haiku** (`claude-haiku-5-5`) modeliyle yapılır ve dokümanları Anthropic API’sine gönderir; anahtar **Ayarlar**’dan girilir veya `ANTHROPIC_API_KEY` ortam değişkeni kullanılır.
 
 ## Geliştirme
 
