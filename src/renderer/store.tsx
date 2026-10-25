@@ -1,18 +1,23 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { newProject, normalizeProject } from '../shared/model';
-import type { AnyRow, Project, TableKey } from '../shared/types';
+import { record } from '../shared/history';
+import { isClosed, newProject, normalizeProject } from '../shared/model';
+import type { AnyRow, PersonRow, Project, TableKey } from '../shared/types';
 import { api } from './api';
 
 interface Store {
   project: Project;
   filePath?: string;
   dirty: boolean;
-  /** Projeyi kopya üzerinde değiştirir; geri alınabilir. */
-  mutate: (fn: (draft: Project) => void) => void;
+  /** Projeyi kopya üzerinde değiştirir; geri alınabilir. Değişiklik günlüğüne actor (yoksa oturumdaki kullanıcı) adıyla yazılır. */
+  mutate: (fn: (draft: Project) => void, actor?: string) => void;
   /** Tek hücre güncellemesi. */
   setField: (table: TableKey, id: string, field: string, value: unknown) => void;
   addRows: (table: TableKey, rows: AnyRow[]) => void;
-  removeRows: (table: TableKey, ids: string[]) => void;
+  /** Kaydı silindi olarak işaretler; satır ve numarası dosyada kalır. */
+  removeRows: (table: TableKey, ids: string[], reason: string) => void;
+  restoreRows: (table: TableKey, ids: string[]) => void;
+  /** Değişiklik günlüğüne yazılan kullanıcı (Windows oturum adı). */
+  user: string;
   replace: (p: Project, path?: string, markClean?: boolean) => void;
   setPath: (p?: string) => void;
   markSaved: () => void;
@@ -35,6 +40,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [filePath, setPath] = useState<string | undefined>();
   const [dirty, setDirty] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; msg: string; kind: string }[]>([]);
+  const [user, setUser] = useState('');
+  const userRef = useRef('');
+  userRef.current = user;
   const undoStack = useRef<Project[]>([]);
   const redoStack = useRef<Project[]>([]);
   const projectRef = useRef(project);
@@ -46,7 +54,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'err' ? 8000 : 4000);
   }, []);
 
-  const commit = useCallback((next: Project) => {
+  useEffect(() => {
+    api.userName().then((u) => setUser(u || 'bilinmiyor'));
+  }, []);
+
+  const commit = useCallback((next: Project, actor?: string) => {
+    record(projectRef.current, next, actor || userRef.current || 'bilinmiyor');
     undoStack.current.push(projectRef.current);
     if (undoStack.current.length > 100) undoStack.current.shift();
     redoStack.current = [];
@@ -56,10 +69,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const mutate = useCallback(
-    (fn: (d: Project) => void) => {
+    (fn: (d: Project) => void, actor?: string) => {
       const d = structuredClone(projectRef.current);
       fn(d);
-      commit(d);
+      commit(d, actor);
     },
     [commit],
   );
@@ -89,10 +102,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addRows = useCallback((table: TableKey, rows: AnyRow[]) => mutate((d) => void (d[table] as AnyRow[]).push(...rows)), [mutate]);
   const removeRows = useCallback(
+    (table: TableKey, ids: string[], reason: string) =>
+      mutate((d) => {
+        const at = new Date().toISOString();
+        for (const r of d[table] as AnyRow[]) {
+          if (!ids.includes(r.id) || r.deletedAt) continue;
+          Object.assign(r, { deletedAt: at, deletedBy: userRef.current, deleteReason: reason });
+          if (table === 'people') (r as PersonRow).active = false;
+        }
+        // Silinen kişinin açık işleri boşa düşer; kapanmış işlerde sorumlu KPI için kalır
+        if (table === 'people') for (const r of [...d.requirements, ...d.issues]) if (ids.includes(r.assignee) && !isClosed(r)) r.assignee = '';
+      }),
+    [mutate],
+  );
+  const restoreRows = useCallback(
     (table: TableKey, ids: string[]) =>
       mutate((d) => {
-        (d as unknown as Record<string, AnyRow[]>)[table] = (d[table] as AnyRow[]).filter((r) => !ids.includes(r.id));
-        if (table === 'people') for (const r of [...d.requirements, ...d.issues]) if (ids.includes(r.assignee)) r.assignee = '';
+        for (const r of d[table] as AnyRow[]) {
+          if (!ids.includes(r.id) || !r.deletedAt) continue;
+          Object.assign(r, { deletedAt: '', deletedBy: '', deleteReason: '' });
+          if (table === 'people') (r as PersonRow).active = true;
+        }
       }),
     [mutate],
   );
@@ -135,8 +165,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [project, dirty, filePath]);
 
   const value = useMemo<Store>(
-    () => ({ project, filePath, dirty, mutate, setField, addRows, removeRows, replace, setPath, markSaved: () => setDirty(false), undo, redo, toast, toasts }),
-    [project, filePath, dirty, mutate, setField, addRows, removeRows, replace, undo, redo, toast, toasts],
+    () => ({ project, filePath, dirty, mutate, setField, addRows, removeRows, restoreRows, user, replace, setPath, markSaved: () => setDirty(false), undo, redo, toast, toasts }),
+    [project, filePath, dirty, mutate, setField, addRows, removeRows, restoreRows, user, replace, undo, redo, toast, toasts],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

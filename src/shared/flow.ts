@@ -66,7 +66,7 @@ export function splitKey(key: string): { code: string; id: string } {
 export function buildRequests(p: Project, ids: string[]): { files: { name: string; content: string }[]; result: SyncResult } {
   const files: { name: string; content: string }[] = [];
   const result: SyncResult = { patches: [], planner: {}, log: [] };
-  for (const { table, row } of rowsOf(p).filter((x) => ids.includes(x.row.id))) {
+  for (const { table, row } of rowsOf(p).filter((x) => ids.includes(x.row.id) && !x.row.deletedAt)) {
     if (isClosed(row)) {
       result.log.push(log(`${row.id}: kapalı/iptal, gönderilmedi`, 'warn'));
       continue;

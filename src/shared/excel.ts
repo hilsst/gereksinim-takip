@@ -1,6 +1,7 @@
 // Excel raporu (exceljs). Ana süreçte (Node) çalışır. Renkler uygulamanın pastel temasıyla aynı.
 import ExcelJS from 'exceljs';
-import { COLUMNS, cellText } from './columns';
+import { COLUMNS, cellText, fieldLabel } from './columns';
+import { rowTitle } from './history';
 import { TABLE_LABEL } from './model';
 import { personSummary, totals } from './summary';
 import type { AnyRow, Project, TableKey } from './types';
@@ -57,7 +58,7 @@ function tableSheet(wb: ExcelJS.Workbook, p: Project, key: TableKey) {
   const ws = wb.addWorksheet(TABLE_LABEL[key], { views: [{ state: 'frozen', xSplit: 1, ySplit: 3 }] });
   title(ws, p, TABLE_LABEL[key], cols.length + 1);
   header(ws, 3, ['ID', ...cols.map((c) => c.label)], [10, ...cols.map((c) => Math.max(8, Math.round(c.width / 7)))]);
-  const rows = p[key] as AnyRow[];
+  const rows = (p[key] as AnyRow[]).filter((r) => !r.deletedAt);
   rows.forEach((r, ri) => {
     const rowNo = 4 + ri;
     const id = ws.getCell(rowNo, 1);
@@ -126,12 +127,42 @@ function logSheet(wb: ExcelJS.Workbook, p: Project) {
   });
 }
 
+function deletedSheet(wb: ExcelJS.Workbook, p: Project) {
+  const rows = (['requirements', 'issues', 'documents', 'people'] as TableKey[]).flatMap((t) => (p[t] as AnyRow[]).filter((r) => r.deletedAt).map((r) => ({ t, r })));
+  if (!rows.length) return;
+  const ws = wb.addWorksheet('Silinenler', { views: [{ state: 'frozen', ySplit: 3 }] });
+  title(ws, p, 'Silinen kayıtlar', 6);
+  header(ws, 3, ['Tablo', 'ID', 'Kayıt', 'Silinme', 'Silen', 'Gerekçe'], [14, 10, 60, 18, 16, 50]);
+  rows.forEach(({ t, r }, i) => {
+    [TABLE_LABEL[t], r.id, rowTitle(r), new Date(r.deletedAt).toLocaleString('tr-TR'), r.deletedBy, r.deleteReason].forEach((v, j) => {
+      const c = ws.getCell(4 + i, j + 1);
+      c.value = v;
+      c.border = BORDER;
+      c.alignment = { wrapText: true, vertical: 'top' };
+    });
+  });
+}
+
+function historySheet(wb: ExcelJS.Workbook, p: Project) {
+  const ws = wb.addWorksheet('Değişiklik Geçmişi', { views: [{ state: 'frozen', ySplit: 3 }] });
+  title(ws, p, 'Değişiklik geçmişi', 7);
+  header(ws, 3, ['Zaman', 'Kullanıcı', 'Kayıt', 'İşlem', 'Alan', 'Eski değer', 'Yeni değer'], [18, 16, 10, 14, 22, 50, 50]);
+  [...p.history].reverse().forEach((h, i) => {
+    [new Date(h.at).toLocaleString('tr-TR'), h.user, h.rowId, h.action, fieldLabel(h.table, h.field), h.from, h.to].forEach((v, j) => {
+      const c = ws.getCell(4 + i, j + 1);
+      c.value = v;
+      c.border = BORDER;
+      c.alignment = { wrapText: true, vertical: 'top' };
+    });
+  });
+}
+
 export async function buildWorkbook(p: Project): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Gereksinim Takip';
   wb.created = new Date();
   // Rapor yalnızca bu projede iş atanmış kişileri gösterir; kayıtlı ekibin geri kalanı rapora girmez
-  const assigned = new Set([...p.requirements, ...p.issues].map((r) => r.assignee).filter(Boolean));
+  const assigned = new Set([...p.requirements, ...p.issues].filter((r) => !r.deletedAt).map((r) => r.assignee).filter(Boolean));
   const team: Project = { ...p, people: p.people.filter((x) => assigned.has(x.id)) };
   summarySheet(wb, team);
   tableSheet(wb, p, 'requirements');
@@ -139,5 +170,7 @@ export async function buildWorkbook(p: Project): Promise<Buffer> {
   tableSheet(wb, p, 'documents');
   tableSheet(wb, team, 'people');
   logSheet(wb, p);
+  deletedSheet(wb, p);
+  historySheet(wb, p);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

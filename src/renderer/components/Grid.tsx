@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { cellText, COLUMNS, type Col } from '../../shared/columns';
+import { cellText, COLUMNS, DELETED_COLS, type Col } from '../../shared/columns';
 import { blankRow, isClosed, isOverdue, nextId } from '../../shared/model';
 import type { AnyRow, Assignable, TableKey } from '../../shared/types';
 import { useStore } from '../store';
-import { badgeClass, PersonCell, SelectCell, TextCell } from './Cells';
+import { badgeClass, DocCell, PersonCell, SelectCell, TextCell } from './Cells';
+import { HistoryList } from './History';
+import { Modal } from './Modal';
 
 interface GridProps {
   table: TableKey;
@@ -16,19 +18,27 @@ interface GridProps {
 }
 
 export function Grid({ table, toolbar, filters, filter, emptyHint, selected: selProp, onSelect }: GridProps) {
-  const { project, addRows, removeRows, toast } = useStore();
+  const { project, addRows, removeRows, restoreRows, toast } = useStore();
   const [q, setQ] = useState('');
   const [all, setAll] = useState(false);
   const [selLocal, setSelLocal] = useState<string[]>([]);
   const selected = selProp ?? selLocal;
   const setSelected = onSelect ?? setSelLocal;
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [deleting, setDeleting] = useState<string[] | null>(null);
+  const [historyOf, setHistoryOf] = useState<string | null>(null);
 
-  const cols = COLUMNS[table].filter((c) => all || !c.secondary);
+  const cols = [...COLUMNS[table].filter((c) => all || !c.secondary), ...(showDeleted ? DELETED_COLS : [])];
   const rows = project[table] as AnyRow[];
+  const liveCount = rows.filter((r) => !r.deletedAt).length;
+  const deletedCount = rows.length - liveCount;
+  const selDeleted = selected.filter((id) => rows.find((r) => r.id === id)?.deletedAt);
+  const selLive = selected.filter((id) => !selDeleted.includes(id));
 
   const visible = useMemo(() => {
-    let out = filter ? rows.filter(filter) : rows;
+    let out = rows.filter((r) => (showDeleted ? !!r.deletedAt : !r.deletedAt));
+    if (filter) out = out.filter(filter);
     if (q.trim()) {
       const n = q.toLocaleLowerCase('tr');
       out = out.filter((r) => r.id.toLowerCase().includes(n) || COLUMNS[table].some((c) => cellText(c, r, project).toLocaleLowerCase('tr').includes(n)));
@@ -38,7 +48,7 @@ export function Grid({ table, toolbar, filters, filter, emptyHint, selected: sel
       out = [...out].sort((a, b) => cellText(col, a, project).localeCompare(cellText(col, b, project), 'tr', { numeric: true }) * sort.dir);
     }
     return out;
-  }, [rows, filter, q, sort, project, table]);
+  }, [rows, filter, q, sort, project, table, showDeleted]);
 
   const addRow = () => {
     const id = nextId(project, table);
@@ -46,13 +56,17 @@ export function Grid({ table, toolbar, filters, filter, emptyHint, selected: sel
     setTimeout(() => (document.querySelector(`[data-row="${id}"] .cell-input`) as HTMLElement | null)?.focus(), 50);
   };
 
-  const remove = () => {
-    if (!selected.length) return;
-    const linked = selected.filter((id) => (rows.find((r) => r.id === id) as Partial<Assignable>)?.plannerTaskId);
-    const warn = linked.length ? `\n\n${linked.length} satır Planner görevine bağlı; Planner'daki görev silinmez.` : '';
-    if (!window.confirm(`${selected.length} satır silinsin mi?\n${selected.join(', ')}${warn}`)) return;
-    removeRows(table, selected);
-    toast(`${selected.length} satır silindi`);
+  const remove = (reason: string) => {
+    if (!deleting?.length) return;
+    removeRows(table, deleting, reason);
+    toast(`${deleting.length} kayıt silindi olarak işaretlendi. “Silinenler” görünümünden geri yüklenebilir.`);
+    setDeleting(null);
+    setSelected([]);
+  };
+
+  const restore = () => {
+    restoreRows(table, selDeleted);
+    toast(`${selDeleted.length} kayıt geri yüklendi`);
     setSelected([]);
   };
 
@@ -62,19 +76,41 @@ export function Grid({ table, toolbar, filters, filter, emptyHint, selected: sel
         <button className="btn" onClick={addRow}>
           + Satır
         </button>
-        <button className="btn danger" disabled={!selected.length} onClick={remove}>
-          Sil{selected.length ? ` (${selected.length})` : ''}
+        {showDeleted ? (
+          <button className="btn mint" disabled={!selDeleted.length} onClick={restore}>
+            Geri yükle{selDeleted.length ? ` (${selDeleted.length})` : ''}
+          </button>
+        ) : (
+          <button className="btn danger" disabled={!selLive.length} onClick={() => setDeleting(selLive)}>
+            Sil{selLive.length ? ` (${selLive.length})` : ''}
+          </button>
+        )}
+        <button className="btn" disabled={selected.length !== 1} title="Seçili kaydın değişiklik geçmişi" onClick={() => setHistoryOf(selected[0])}>
+          Geçmiş
         </button>
-        {toolbar && <span className="sep" />}
-        {toolbar?.(selected)}
+        {toolbar && !showDeleted && <span className="sep" />}
+        {!showDeleted && toolbar?.(selLive)}
         <span className="grow" />
         {filters}
         <label className="check">
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Tüm kolonlar
         </label>
+        {(deletedCount > 0 || showDeleted) && (
+          <label className="check" title="Silinen kayıtlar dosyada kalır; buradan görülür ve geri yüklenir">
+            <input
+              type="checkbox"
+              checked={showDeleted}
+              onChange={(e) => {
+                setShowDeleted(e.target.checked);
+                setSelected([]);
+              }}
+            />{' '}
+            Silinenler ({deletedCount})
+          </label>
+        )}
         <input className="search" placeholder="Ara…" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="muted count">
-          {visible.length}/{rows.length}
+          {visible.length}/{showDeleted ? deletedCount : liveCount}
         </span>
       </div>
       <div className="grid-scroll">
@@ -108,6 +144,7 @@ export function Grid({ table, toolbar, filters, filter, emptyHint, selected: sel
                 a.workStatus && isOverdue(a as Assignable) ? 'late' : '',
                 a.workStatus === 'Kapandı' ? 'done' : '',
                 a.workStatus && isClosed(a as Assignable) ? 'closed' : '',
+                r.deletedAt ? 'deleted' : '',
               ].join(' ');
               return (
                 <tr key={r.id} data-row={r.id} className={cls}>
@@ -125,9 +162,50 @@ export function Grid({ table, toolbar, filters, filter, emptyHint, selected: sel
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <div className="empty">{emptyHint ?? 'Henüz kayıt yok. “+ Satır” ile başlayın.'}</div>}
+        {liveCount === 0 && !showDeleted && <div className="empty">{emptyHint ?? 'Henüz kayıt yok. “+ Satır” ile başlayın.'}</div>}
       </div>
+      {deleting && <DeleteDialog table={table} ids={deleting} onConfirm={remove} onClose={() => setDeleting(null)} />}
+      {historyOf && (
+        <Modal title={`${historyOf} değişiklik geçmişi`} sub="Bu kayıtta yapılan tüm değişiklikler, en yenisi üstte." icon="↺" wide onClose={() => setHistoryOf(null)}>
+          <HistoryList rowId={historyOf} />
+        </Modal>
+      )}
     </div>
+  );
+}
+
+/** Silme gerekçesi zorunlu: kayıt silinmez, gerekçesiyle birlikte silindi olarak işaretlenir. */
+function DeleteDialog({ table, ids, onConfirm, onClose }: { table: TableKey; ids: string[]; onConfirm: (reason: string) => void; onClose: () => void }) {
+  const { project } = useStore();
+  const [reason, setReason] = useState('');
+  const rows = (project[table] as AnyRow[]).filter((r) => ids.includes(r.id));
+  const linked = rows.filter((r) => (r as Partial<Assignable>).plannerTaskId).length;
+  return (
+    <Modal
+      title={`${ids.length} kayıt silinsin mi?`}
+      sub={ids.join(', ')}
+      icon="✕"
+      onClose={onClose}
+      foot={
+        <>
+          <button className="btn" onClick={onClose}>
+            Vazgeç
+          </button>
+          <button className="btn danger" disabled={!reason.trim()} onClick={() => onConfirm(reason.trim())}>
+            Sil
+          </button>
+        </>
+      }
+    >
+      <p>Kayıt dosyada kalır, numarası başka bir kayda verilmez ve “Silinenler” görünümünden geri yüklenebilir. Silme işlemi değişiklik geçmişine yazılır.</p>
+      {linked > 0 && <div className="callout">{linked} kayıt Planner görevine bağlı; Planner'daki görev silinmez.</div>}
+      <div className="form" style={{ marginTop: 12 }}>
+        <label className="wide">
+          <span>Silme gerekçesi</span>
+          <textarea className="cell-input" autoFocus rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Örn. müşteri e-postası ile iptal edildi, mükerrer kayıt (REQ-004 ile aynı)" />
+        </label>
+      </div>
+    </Modal>
   );
 }
 
@@ -143,6 +221,8 @@ function Cell({ col, row, table }: { col: Col; row: AnyRow; table: TableKey }) {
     }
     case 'select':
       return <SelectCell field={col.key} value={value} options={col.options ?? []} readonly={col.readonly} onCommit={commit} />;
+    case 'doc':
+      return <DocCell value={value} project={project} onCommit={commit} />;
     case 'person':
       return <PersonCell value={value} discipline={(row as Partial<Assignable>).discipline} project={project} onCommit={commit} />;
     case 'bool':

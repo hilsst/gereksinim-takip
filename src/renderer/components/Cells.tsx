@@ -109,3 +109,23 @@ export function badgeClass(key: string, text: string): string {
   if (key === 'evidenceType') return 'b-lav';
   return '';
 }
+
+/** Kaynak doküman seçimi: silinmemiş dokümanlar, "DOC-002 · Teknik şartname" biçiminde. */
+export function DocCell({ value, project, onCommit }: { value: unknown; project: Project; onCommit: (v: unknown) => void }) {
+  const v = value == null ? '' : String(value);
+  const docs = project.documents.filter((d) => !d.deletedAt || d.id === v);
+  return (
+    <select className="cell-select" value={v} onChange={(e) => onCommit(e.target.value)}>
+      <option value=""></option>
+      {v && !docs.some((d) => d.id === v) && <option value={v}>{v} (bulunamadı)</option>}
+      {docs.map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.id}
+          {d.name ? ` · ${d.name}` : ''}
+          {d.revision ? ` (Rev ${d.revision})` : ''}
+          {d.deletedAt ? ' – silindi' : ''}
+        </option>
+      ))}
+    </select>
+  );
+}

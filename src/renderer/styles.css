@@ -251,3 +251,15 @@ td.t-bool .center { padding: 8px; }
 .seg button.on b { color: var(--lav-ink); }
 h4.mini { font-size: 12.5px; margin: 14px 0 6px; color: var(--lav-ink); }
 .card code { background: var(--gray); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+
+/* Silinen kayıtlar ve değişiklik geçmişi */
+.grid tr.deleted td:not(.sticky-col) { opacity: 0.55; text-decoration: line-through; }
+.grid tr.deleted td.sticky-col.id { box-shadow: inset 3px 0 0 var(--rose-mid); }
+.history { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.history th { position: sticky; top: 0; background: var(--lav); text-align: left; font-size: 11.5px; color: var(--ink-2); font-weight: 600; padding: 8px 10px; }
+.history td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.history td.nowrap { white-space: nowrap; }
+.history td.val { max-width: 360px; white-space: pre-wrap; word-break: break-word; }
+.history td.val.old { color: var(--ink-2); }
+.history tr.a-del td { background: var(--rose); }
+.history tr.a-new td { background: var(--mint); }

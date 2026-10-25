@@ -1,11 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell } from 'electron';
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { buildWorkbook } from '../shared/excel';
 import { applyEvents, buildRequests, DONE_DIR, IN_DIR, OUT_DIR, type FlowEvent } from '../shared/flow';
 import { pullCompletions, pushAssignments } from '../shared/planner';
-import type { Member } from '../shared/model';
+import { SCHEMA, type Member } from '../shared/model';
 import type { Project } from '../shared/types';
 import * as ai from './ai';
 import { Graph } from './graph';
@@ -178,8 +179,22 @@ function registerIpc() {
       target = r.filePaths[0];
     }
     const text = await fs.readFile(target, 'utf8');
+    const data = JSON.parse(text) as Project;
     addRecent(target);
-    return { path: target, data: JSON.parse(text) as Project };
+    // Eski şemalı dosya ilk kayıtta dönüşür; dönüşmeden önceki hâli yanında yedek olarak kalır
+    let backup: string | undefined;
+    if ((data.schema as string) !== SCHEMA) {
+      backup = target.replace(/\.greq$/i, '') + '.sema1-yedek.greq';
+      if (!fssync.existsSync(backup)) await fs.copyFile(target, backup);
+    }
+    return { path: target, data, backup };
+  });
+  ipcMain.handle('app:user', () => {
+    try {
+      return os.userInfo().username;
+    } catch {
+      return process.env.USERNAME ?? process.env.USER ?? '';
+    }
   });
   ipcMain.handle('project:save', async (_e, args: { path?: string; data: Project; saveAs?: boolean }) => {
     let target = args.path;

@@ -44,7 +44,7 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
 
   const apply = useCallback(
     (r: SyncResult) => {
-      mutate((d) => Object.assign(d, applySync(d, r)));
+      mutate((d) => Object.assign(d, applySync(d, r)), 'Teams Planner');
       const errs = r.log.filter((l) => l.kind === 'err').length;
       return errs;
     },

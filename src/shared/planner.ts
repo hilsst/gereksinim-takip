@@ -102,7 +102,7 @@ export async function pushAssignments(g: GraphLike, p: Project, ids: string[]): 
     return b.id;
   };
 
-  for (const { table, row } of rowsOf(p).filter((x) => ids.includes(x.row.id))) {
+  for (const { table, row } of rowsOf(p).filter((x) => ids.includes(x.row.id) && !x.row.deletedAt)) {
     try {
       if (isClosed(row)) {
         res.log.push(log(`${row.id}: kapalı/iptal, gönderilmedi`, 'warn'));

@@ -30,6 +30,7 @@ Kurulu sürüm, FMEA Studio’daki gibi kendini günceller: açılışta GitHub 
 | 3 | Açık Konular | Eksik bilgi, çelişki ve belirsizlikler (Critical / Important / Optional). Bunlar da atanabilir ve Planner’a gönderilebilir. |
 | 4 | Ekip | Mühendisler ve Microsoft 365 e-posta adresleri. |
 | 5 | Teams Planner | Bağlantı, plan seçimi, otomatik kontrol aralığı ve senkron günlüğü. |
+| 6 | Geçmiş | Değişiklik günlüğü: kim (Windows kullanıcı adı), ne zaman, hangi kaydın hangi alanı, eski ve yeni değer. Planner kapanışları “Teams Planner” adıyla yazılır. |
 | – | Özet | Sayaçlar ve kişi bazında açık / gecikmiş / zamanında kapanan oranı. |
 
 Desteklenen dosyalar: `.docx`, `.xlsx`/`.xlsm`, `.pdf`, `.png`/`.jpg`, `.msg`, `.eml` (e-posta ekleri de okunur), `.txt`/`.csv`/`.md`/`.html`. Eski `.doc` / `.xls` biçimlerini önce yeni biçimde kaydedin.
@@ -61,8 +62,12 @@ Giriş kişinin kendi hesabıyla yapılır (delegated); token işletim sistemini
 
 ## Dosyalar
 
-- Proje dosyası: `.greq` (JSON). Kayıt önce geçici dosyaya yazılıp sonra yeniden adlandırılır; ortak ağ klasöründe yarım dosya kalmaz.
-- **Excel raporu**: Özet (kişi bazında), Gereksinimler, Açık Konular, Dokümanlar, Ekip, Planner Günlüğü.
+- Proje dosyası: `.greq` (JSON, şema `gereksinim-takip/2`). Kayıt önce geçici dosyaya yazılıp sonra yeniden adlandırılır; ortak ağ klasöründe yarım dosya kalmaz.
+- **Kalıcı numara**: REQ / ISS / DOC / P numaraları sayaçla verilir; silinen kaydın numarası başka kayda verilmez.
+- **Silme**: kayıt dosyadan çıkmaz, gerekçesiyle “silindi” işaretlenir. Tablodaki **Silinenler** kutusuyla görülür ve geri yüklenir; özet, Planner ve Excel tablolarına girmez.
+- **Kaynak**: gereksinim ve açık konuda kaynak doküman (DOC-001) ile doküman içindeki yer (sayfa, madde, ölçü no) ayrı alanlardır.
+- **Eski dosyalar** (v0.5 ve öncesi, şema 1) açılırken dönüşür; dönüşmeden önceki hâli yanına `<ad>.sema1-yedek.greq` olarak kopyalanır.
+- **Excel raporu**: Özet (kişi bazında), Gereksinimler, Açık Konular, Dokümanlar, Ekip, Planner Günlüğü, Silinenler, Değişiklik Geçmişi.
 - AI çıkarma **Claude Haiku** (`claude-haiku-5-5`) modeliyle yapılır ve dokümanları Anthropic API’sine gönderir; anahtar **Ayarlar**’dan girilir veya `ANTHROPIC_API_KEY` ortam değişkeni kullanılır.
 
 ## Geliştirme
@@ -73,6 +78,7 @@ npm run dev          # Vite + Electron
 npm test             # Planner senkronu, dosya dönüştürme, özet, Excel testleri
 npm run typecheck
 npm run build && xvfb-run -a node tests/e2e/smoke.mjs ./shots   # uçtan uca duman testi
+xvfb-run -a node tests/e2e/faz1.mjs ./shots                       # silme, kalıcı numara, geçmiş, eski dosya yedeği
 npm run dist:win     # Windows paketi (Windows veya CI)
 ```
 
@@ -83,9 +89,12 @@ Kod yapısı:
 - `src/main/graph.ts`: Microsoft Graph istemcisi ve giriş (MSAL)
 - `src/shared/planner.ts`: Planner gönderme / kapanış çekme kuralları (ağdan bağımsız, testli)
 - `src/shared/summary.ts`: kişi bazında özet (ileride tasarımcı KPI’ları)
+- `src/shared/history.ts`: değişiklik günlüğü (önceki / sonraki proje karşılaştırması)
 - `src/renderer/`: React arayüzü (pastel tema: `styles.css`)
 
 ## Yol haritası
+
+İzlenebilirlik, revizyon ve baseline için dört faz planlandı; Faz 1 (kalıcı kimlik, silindi işareti, kaynak doküman bağı, değişiklik günlüğü) v0.6.0 ile geldi. Sıradakiler: bağlantı tablosu ve doğrulama kayıtları (v0.7), gereksinim revizyonu ve etki analizi (v0.8), baseline ve değişiklik talebi (v0.9).
 
 - ENOVIA’dan indirilen montaj / tek parça STEP dosyasını gereksinim listesiyle karşılaştırma raporu
 - Tasarımcı KPI’ları

@@ -9,7 +9,8 @@ type Cfg = { clientId: string; tenantId: string };
 type Account = { name: string; username: string };
 
 const api = {
-  openProject: (file?: string): Promise<{ path: string; data: Project } | null> => ipcRenderer.invoke('project:open', file),
+  openProject: (file?: string): Promise<{ path: string; data: Project; backup?: string } | null> => ipcRenderer.invoke('project:open', file),
+  userName: (): Promise<string> => ipcRenderer.invoke('app:user'),
   saveProject: (args: { path?: string; data: Project; saveAs?: boolean }): Promise<string | null> => ipcRenderer.invoke('project:save', args),
   recent: (): Promise<string[]> => ipcRenderer.invoke('project:recent'),
   recovery: (): Promise<{ path?: string; data: Project; at: string } | null> => ipcRenderer.invoke('project:recovery'),

@@ -209,7 +209,7 @@ describe('Excel raporu', () => {
     const ExcelJS = (await import('exceljs')).default;
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load((await buildWorkbook(sampleProject())) as unknown as ArrayBuffer);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['Özet', 'Gereksinimler', 'Açık Konular', 'Dokümanlar', 'Ekip', 'Planner Günlüğü']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Özet', 'Gereksinimler', 'Açık Konular', 'Dokümanlar', 'Ekip', 'Planner Günlüğü', 'Değişiklik Geçmişi']);
     expect(wb.getWorksheet('Gereksinimler')!.getCell(4, 1).value).toBe('REQ-001');
     // Ekip sayfası yalnızca bu projede iş atanan kişileri içerir (P-003 atanmamış)
     const ekip = wb.getWorksheet('Ekip')!;

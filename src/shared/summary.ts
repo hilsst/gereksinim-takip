@@ -1,5 +1,5 @@
 // Kişi ve disiplin bazında atama özeti (ileride tasarımcı KPI'larının temeli).
-import { delayDays, isClosed, isOverdue } from './model';
+import { delayDays, isClosed, isOverdue, live } from './model';
 import type { Assignable, Project } from './types';
 
 export interface PersonSummary {
@@ -17,13 +17,17 @@ export interface PersonSummary {
   onTimeRate: number | null;
 }
 
+/** Silinmemiş gereksinim ve açık konular. */
 export function assignables(p: Project): Assignable[] {
-  return [...p.requirements, ...p.issues];
+  return [...p.requirements, ...p.issues].filter((r) => !r.deletedAt);
 }
 
 export function personSummary(p: Project, today = new Date().toISOString().slice(0, 10)): PersonSummary[] {
-  return p.people.map((x) => {
-    const rows = assignables(p).filter((r) => r.assignee === x.id && r.workStatus !== 'İptal');
+  const work = assignables(p);
+  // Ekipten silinen kişi, üzerinde iş kaldıysa KPI'da görünmeye devam eder
+  const people = p.people.filter((x) => !x.deletedAt || work.some((r) => r.assignee === x.id));
+  return people.map((x) => {
+    const rows = work.filter((r) => r.assignee === x.id && r.workStatus !== 'İptal');
     const closed = rows.filter((r) => r.workStatus === 'Kapandı');
     const onTime = closed.filter((r) => !r.dueDate || (r.closedAt && r.closedAt.slice(0, 10) <= r.dueDate));
     return {
@@ -41,7 +45,8 @@ export function personSummary(p: Project, today = new Date().toISOString().slice
   });
 }
 
-export function totals(p: Project, today = new Date().toISOString().slice(0, 10)) {
+export function totals(src: Project, today = new Date().toISOString().slice(0, 10)) {
+  const p = live(src);
   const all = assignables(p).filter((r) => r.workStatus !== 'İptal');
   return {
     requirements: p.requirements.length,
