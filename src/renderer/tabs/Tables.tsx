@@ -125,7 +125,7 @@ function AssignableTab({ table }: { table: AssignableTable }) {
             </select>
             <select className="filter" value={person} onChange={(e) => setPerson(e.target.value)}>
               <option value="">Tüm kişiler</option>
-              {project.people.map((x) => (
+              {project.people.filter((x) => !x.deletedAt).map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.name}
                 </option>

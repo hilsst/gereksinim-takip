@@ -1,4 +1,6 @@
-import type { AnyRow, Assignable, Discipline, IssueRow, PersonRow, Project, RequirementRow, TableKey } from './types';
+import type { AnyRow, Assignable, BaseRow, Discipline, IssueRow, PersonRow, Project, RequirementRow, TableKey } from './types';
+
+export const SCHEMA = 'gereksinim-takip/2';
 
 export const ID_PREFIX: Record<TableKey, string> = {
   documents: 'DOC',
@@ -34,32 +36,70 @@ const assignBlank = (): Assignable => ({
   plannerTaskId: '', plannerSyncedAt: '', plannerEtag: '', closedAt: '', closedBy: '', closureNote: '',
 });
 
+const alive = () => ({ deletedAt: '', deletedBy: '', deleteReason: '' });
+
 export function blankRow(table: TableKey, id: string): AnyRow {
+  const base = { id, ...alive() };
   switch (table) {
     case 'documents':
-      return { id, name: '', docType: '', docNumber: '', revision: '', date: '', source: '', notes: '', filePath: '', extractedAt: '' };
+      return { ...base, name: '', docType: '', docNumber: '', revision: '', date: '', source: '', notes: '', filePath: '', extractedAt: '' };
     case 'requirements':
-      return { id, ...assignBlank(), text: '', reqType: '', acceptance: '', evidenceType: '', evidence: '', source: '', confidence: '', dataStatus: '', approval: '', notes: '' };
+      return { ...base, ...assignBlank(), text: '', reqType: '', acceptance: '', evidenceType: '', evidence: '', sourceDocId: '', sourceRef: '', confidence: '', dataStatus: '', approval: '', notes: '' };
     case 'issues':
-      return { id, ...assignBlank(), description: '', priority: '', source: '', risk: '', relatedReq: '', recommendedAction: '', status: 'Open', answer: '' };
+      return { ...base, ...assignBlank(), description: '', priority: '', sourceDocId: '', sourceRef: '', risk: '', relatedReq: '', recommendedAction: '', status: 'Open', answer: '' };
     case 'people':
-      return { id, name: '', discipline: '', email: '', aadId: '', active: true };
+      return { ...base, name: '', discipline: '', email: '', aadId: '', active: true };
   }
 }
 
+const idNum = (id: string) => Number(id.match(/-(\d+)$/)?.[1] ?? 0);
+
+/** Tablodaki en büyük numara (silinenler dahil). */
+function maxNum(rows: AnyRow[]): number {
+  return rows.reduce((n, r) => Math.max(n, idNum(r.id)), 0);
+}
+
+/** Yeni kayıt numarası. Sayaç (seq) geri gitmez: silinen veya geri alınan kaydın numarası tekrar verilmez. */
 export function nextId(p: Project, table: TableKey): string {
-  const prefix = ID_PREFIX[table];
-  let max = 0;
-  for (const r of p[table] as AnyRow[]) {
-    const m = r.id.match(/-(\d+)$/);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `${prefix}-${String(max + 1).padStart(3, '0')}`;
+  const n = Math.max(p.seq?.[table] ?? 0, maxNum(p[table] as AnyRow[])) + 1;
+  return `${ID_PREFIX[table]}-${String(n).padStart(3, '0')}`;
+}
+
+/** Eklenen kayıtların numarasını sayaca işler. */
+export function bumpSeq(p: Project): void {
+  for (const t of Object.keys(ID_PREFIX) as TableKey[]) p.seq[t] = Math.max(p.seq[t] ?? 0, maxNum(p[t] as AnyRow[]));
+}
+
+export const isDeleted = (r: Partial<BaseRow>) => !!r.deletedAt;
+
+/** Silinmiş kayıtlar çıkarılmış proje: özet, rapor ve sayılar bunu kullanır. */
+export function live(p: Project): Project {
+  return {
+    ...p,
+    documents: p.documents.filter((r) => !r.deletedAt),
+    requirements: p.requirements.filter((r) => !r.deletedAt),
+    issues: p.issues.filter((r) => !r.deletedAt),
+    people: p.people.filter((r) => !r.deletedAt),
+  };
+}
+
+/** Eski serbest metin kaynağı ayırır: "DOC-002 / §3.2" → { sourceDocId: "DOC-002", sourceRef: "§3.2" }. */
+export function splitSource(source: string): { sourceDocId: string; sourceRef: string } {
+  const s = (source ?? '').trim();
+  const m = s.match(/\bDOC-\d+\b/);
+  if (!m) return { sourceDocId: '', sourceRef: s };
+  const rest = (s.slice(0, m.index) + ' ' + s.slice(m.index! + m[0].length)).replace(/^[\s/·,;:–-]+|[\s/·,;:–-]+$/g, '').replace(/\s{2,}/g, ' ');
+  return { sourceDocId: m[0], sourceRef: rest };
+}
+
+/** Kaynak gösterimi: "DOC-002 / §3.2". */
+export function sourceLabel(r: { sourceDocId: string; sourceRef: string }): string {
+  return [r.sourceDocId, r.sourceRef].filter(Boolean).join(' / ');
 }
 
 export function newProject(): Project {
   return {
-    schema: 'gereksinim-takip/1',
+    schema: SCHEMA,
     meta: { name: '', code: '', partNumber: '', partName: '', customer: '', program: '', drawingRevision: '', owner: '', startDate: new Date().toISOString().slice(0, 10), scope: '', confidentiality: '' },
     planner: { mode: 'flow', flowFolder: '', clientId: '', tenantId: '', planId: '', planTitle: '', buckets: {}, pollMinutes: 5, lastSync: '' },
     documents: [],
@@ -67,23 +107,38 @@ export function newProject(): Project {
     issues: [],
     people: [],
     syncLog: [],
+    seq: { documents: 0, requirements: 0, issues: 0, people: 0 },
+    history: [],
   };
 }
 
+/** Dosyadan gelen projeyi güncel şemaya getirir. Şema 1 (v0.5 ve öncesi) dosyalar burada dönüşür. */
 export function normalizeProject(raw: Partial<Project>): Project {
   const base = newProject();
+  const v1 = (raw.schema as string | undefined) !== SCHEMA;
   const p: Project = {
     ...base,
     ...raw,
-    schema: 'gereksinim-takip/1',
+    schema: SCHEMA,
     meta: { ...base.meta, ...(raw.meta ?? {}) },
     planner: { ...base.planner, ...(raw.planner ?? {}), buckets: { ...(raw.planner?.buckets ?? {}) } },
     syncLog: raw.syncLog ?? [],
+    seq: { ...base.seq, ...(raw.seq ?? {}) },
+    history: raw.history ?? [],
   } as Project;
   for (const t of Object.keys(ID_PREFIX) as TableKey[]) {
     const rows = (raw[t] as AnyRow[] | undefined) ?? [];
-    (p as unknown as Record<string, AnyRow[]>)[t] = rows.map((r) => ({ ...blankRow(t, r.id), ...r }) as AnyRow);
+    (p as unknown as Record<string, AnyRow[]>)[t] = rows.map((r) => {
+      const row = { ...blankRow(t, r.id), ...r } as AnyRow & { source?: string };
+      // Şema 1: gereksinim ve açık konudaki serbest metin kaynak, doküman ID'si ve yer olarak ayrılır
+      if (v1 && (t === 'requirements' || t === 'issues') && 'source' in row) {
+        Object.assign(row, splitSource(String(row.source ?? '')));
+        delete row.source;
+      }
+      return row as AnyRow;
+    });
   }
+  bumpSeq(p);
   return p;
 }
 
@@ -151,7 +206,7 @@ export function taskDescription(p: Project, r: RequirementRow | IssueRow): strin
     if (r.recommendedAction) lines.push(`Önerilen aksiyon: ${r.recommendedAction}`);
     if (r.relatedReq) lines.push(`İlgili gereksinim: ${r.relatedReq}`);
   }
-  if (r.source) lines.push(`Kaynak: ${r.source}`);
+  if (sourceLabel(r)) lines.push(`Kaynak: ${sourceLabel(r)}`);
   lines.push('', CLOSURE_MARK, '');
   return lines.join('\n');
 }
@@ -163,7 +218,7 @@ export function closureFromDescription(desc: string): string {
 }
 
 export function activePeople(p: Project, discipline?: string): PersonRow[] {
-  return p.people.filter((x) => x.active && (!discipline || !x.discipline || x.discipline === discipline));
+  return p.people.filter((x) => x.active && !x.deletedAt && (!discipline || !x.discipline || x.discipline === discipline));
 }
 
 /** Ekip üyesi adayı (Teams grubundan veya kayıtlı ekipten). */

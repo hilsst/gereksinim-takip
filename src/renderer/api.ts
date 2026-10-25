@@ -21,6 +21,7 @@ function browserFallback(): Api {
       localStorage.setItem(key, JSON.stringify(data));
       return 'tarayici';
     },
+    userName: async () => 'tarayici',
     recent: async () => [],
     recovery: async () => null,
     autosave: async () => undefined,

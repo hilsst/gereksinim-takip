@@ -1,8 +1,9 @@
 // Ekran tabloları ve Excel çıktısı için ortak kolon tanımları.
 import { delayDays, LISTS, personName } from './model';
+import { rowTitle } from './history';
 import type { AnyRow, Assignable, Project, TableKey } from './types';
 
-export type ColType = 'text' | 'long' | 'select' | 'person' | 'bool' | 'date' | 'computed';
+export type ColType = 'text' | 'long' | 'select' | 'person' | 'doc' | 'bool' | 'date' | 'computed';
 
 export interface Col {
   key: string;
@@ -41,6 +42,18 @@ const assignCols = (): Col[] => [
   t('closedBy', 'Kapatan', 120, { readonly: true, secondary: true }),
 ];
 
+const sourceCols = (): Col[] => [
+  { key: 'sourceDocId', label: 'Kaynak Doküman', width: 170, type: 'doc', help: 'Gereksinimin çıktığı doküman (Dokümanlar tablosundan)' },
+  t('sourceRef', 'Kaynak Yeri', 150, { help: 'Doküman içindeki yer: sayfa, madde, ölçü no, e-posta tarihi' }),
+];
+
+/** Silinenler gösterilirken tabloya eklenen kolonlar. */
+export const DELETED_COLS: Col[] = [
+  t('deletedAt', 'Silinme', 110, { readonly: true }),
+  t('deletedBy', 'Silen', 110, { readonly: true }),
+  long('deleteReason', 'Silme Gerekçesi', 200, { readonly: true }),
+];
+
 export const COLUMNS: Record<TableKey, Col[]> = {
   documents: [
     t('name', 'Doküman Adı', 220),
@@ -51,7 +64,7 @@ export const COLUMNS: Record<TableKey, Col[]> = {
     t('source', 'Kaynak / Gönderen', 150),
     long('notes', 'Notlar', 220),
     t('filePath', 'Dosya', 200, { readonly: true }),
-    comp('reqCount', 'Gereksinim', (r, p) => p.requirements.filter((q) => q.source.includes(r.id)).length || '', 90, 'Bu dokümanı kaynak gösteren gereksinim sayısı'),
+    comp('reqCount', 'Gereksinim', (r, p) => p.requirements.filter((q) => q.sourceDocId === r.id && !q.deletedAt).length || '', 90, 'Bu dokümanı kaynak gösteren gereksinim sayısı'),
     t('extractedAt', 'AI Çıkarma', 140, { readonly: true, secondary: true }),
   ],
   requirements: [
@@ -60,7 +73,7 @@ export const COLUMNS: Record<TableKey, Col[]> = {
     long('acceptance', 'Kabul Kriteri', 200),
     sel('evidenceType', 'Kanıt Türü', LISTS.evidenceType, 140),
     long('evidence', 'Kanıt (nasıl gösterilecek)', 240, { help: 'Beklenen kanıt: rapor, ölçüm kaydı, model görüntüsü, sertifika…' }),
-    t('source', 'Kaynak', 170, { help: 'Doküman ID / No, sayfa, bölüm, ölçü no' }),
+    ...sourceCols(),
     sel('confidence', 'AI Güven', LISTS.confidence, 80, { secondary: true }),
     sel('dataStatus', 'Veri Durumu', LISTS.dataStatus, 170, { secondary: true }),
     sel('approval', 'Onay', LISTS.approval, 130),
@@ -70,7 +83,7 @@ export const COLUMNS: Record<TableKey, Col[]> = {
   issues: [
     long('description', 'Konu / Eksik Bilgi', 280),
     sel('priority', 'Öncelik', LISTS.priority, 100),
-    t('source', 'Kaynak', 150),
+    ...sourceCols(),
     long('risk', 'Risk', 180),
     t('relatedReq', 'İlgili Gereksinim', 120),
     long('recommendedAction', 'Önerilen Aksiyon', 200),
@@ -84,7 +97,7 @@ export const COLUMNS: Record<TableKey, Col[]> = {
     t('email', 'E-posta (Microsoft 365)', 260, { help: 'Planner ataması bu hesapla yapılır' }),
     { key: 'active', label: 'Aktif', width: 60, type: 'bool' },
     comp('linked', 'M365', (r) => ((r as { aadId?: string }).aadId ? 'Eşleşti' : ''), 80, 'İlk Planner gönderiminde hesap eşleştirilir'),
-    comp('openCount', 'Açık iş', (r, p) => [...p.requirements, ...p.issues].filter((x) => x.assignee === r.id && x.workStatus !== 'Kapandı' && x.workStatus !== 'İptal').length || '', 80),
+    comp('openCount', 'Açık iş', (r, p) => [...p.requirements, ...p.issues].filter((x) => x.assignee === r.id && !x.deletedAt && x.workStatus !== 'Kapandı' && x.workStatus !== 'İptal').length || '', 80),
   ],
 };
 
@@ -95,7 +108,23 @@ export function cellText(col: Col, row: AnyRow, p: Project): string {
   }
   const v = (row as unknown as Record<string, unknown>)[col.key];
   if (col.type === 'person') return v ? personName(p, String(v)) : '';
+  if (col.type === 'doc') return v ? docLabel(p, String(v)) : '';
+  if (col.key === 'deletedAt') return v ? String(v).slice(0, 10) : '';
   if (col.type === 'bool') return v ? 'Evet' : '';
   if (Array.isArray(v)) return v.join(', ');
   return v == null ? '' : String(v);
+}
+
+/** "DOC-002 · Teknik şartname" */
+export function docLabel(p: Project, id: string): string {
+  const d = p.documents.find((x) => x.id === id);
+  return d ? [id, rowTitle(d)].filter(Boolean).join(' · ') : id;
+}
+
+const EXTRA_LABELS: Record<string, string> = { deletedAt: 'Silinme', deletedBy: 'Silen', deleteReason: 'Silme Gerekçesi', plannerTaskId: 'Planner görevi', active: 'Aktif' };
+
+/** Günlükteki alan adının ekrandaki karşılığı. */
+export function fieldLabel(table: TableKey, field: string): string {
+  if (!field) return '';
+  return COLUMNS[table].find((c) => c.key === field)?.label ?? EXTRA_LABELS[field] ?? field;
 }

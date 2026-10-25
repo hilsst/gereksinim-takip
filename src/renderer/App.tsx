@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { mergeMembers, newProject } from '../shared/model';
+import { live, mergeMembers, newProject } from '../shared/model';
 import { sampleProject } from '../shared/sample';
 import { totals } from '../shared/summary';
 import type { Project } from '../shared/types';
@@ -9,10 +9,12 @@ import { usePlanner } from './planner';
 import { useStore } from './store';
 import { TABS, type TabKey } from './tabs';
 import { OverviewTab } from './tabs/Overview';
+import { HistoryTab } from './tabs/HistoryTab';
 import { PlannerTab } from './tabs/PlannerTab';
 import { DocumentsTab, IssuesTab, PeopleTab, RequirementsTab } from './tabs/Tables';
 
-function navCount(p: Project, key: TabKey): { n: number | string; tone?: string } | null {
+function navCount(all: Project, key: TabKey): { n: number | string; tone?: string } | null {
+  const p = live(all);
   const t = totals(p);
   switch (key) {
     case 'documents': return { n: p.documents.length };
@@ -78,7 +80,9 @@ export function App() {
       try {
         const r = await api.openProject(file);
         if (!r) return;
-        replace(await withLastFolder(r.data), r.path);
+        // Eski şemalı dosya bellekte dönüşür; kaydedilene kadar diskteki dosya değişmez
+        replace(await withLastFolder(r.data), r.path, !r.backup);
+        if (r.backup) toast(`Dosya yeni biçime dönüştürüldü. Kaydettiğinizde güncellenir; eski hâli yedeklendi: ${r.backup}`, 'warn');
         setWelcome(false);
         setTab('overview');
       } catch (e) {
@@ -125,7 +129,7 @@ export function App() {
   // Ekip değiştikçe kayıtlı ekibe yaz (örnek proje hariç)
   useEffect(() => {
     if (welcome || project.meta.code === 'DEMO') return;
-    const people = project.people.filter((x) => x.email && x.name);
+    const people = project.people.filter((x) => x.email && x.name && !x.deletedAt);
     if (!people.length) return;
     const t = setTimeout(() => api.teamSave(people.map((x) => ({ name: x.name, email: x.email, discipline: x.discipline }))), 800);
     return () => clearTimeout(t);
@@ -223,6 +227,7 @@ export function App() {
           {tab === 'issues' && <IssuesTab />}
           {tab === 'people' && <PeopleTab />}
           {tab === 'planner' && <PlannerTab />}
+          {tab === 'history' && <HistoryTab />}
         </div>
       </main>
 

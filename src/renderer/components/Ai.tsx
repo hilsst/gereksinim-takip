@@ -19,7 +19,7 @@ const DOC_TYPE: Record<string, string> = {
 };
 
 export function existingSummary(p: Project): string[] {
-  return p.requirements.map((r) => `${r.id} [${r.reqType}] ${r.text} | Kabul: ${r.acceptance || 'VERİ YOK'}`);
+  return p.requirements.filter((r) => !r.deletedAt).map((r) => `${r.id} [${r.reqType}] ${r.text} | Kabul: ${r.acceptance || 'VERİ YOK'}`);
 }
 
 export function useExtraction() {
@@ -143,7 +143,8 @@ function ProposalDialog({ proposal, onClose }: { proposal: Proposal; onClose: ()
           evidenceType: String(r.evidenceType ?? ''),
           evidence: String(r.evidence ?? ''),
           discipline: (String(r.discipline ?? '') as RequirementRow['discipline']) || '',
-          source: String(r.source ?? r.docId),
+          sourceDocId: String(r.docId),
+          sourceRef: String(r.source ?? ''),
           confidence: (r.confidence as RequirementRow['confidence']) ?? '',
           dataStatus: acceptance.includes('VERİ YOK') ? NO_DATA : 'Dokümandan (kaynaklı)',
           approval: 'AI Proposed',
@@ -157,7 +158,8 @@ function ProposalDialog({ proposal, onClose }: { proposal: Proposal; onClose: ()
           ...(blankRow('issues', id) as IssueRow),
           description: String(r.description ?? ''),
           priority: (r.priority as IssueRow['priority']) ?? '',
-          source: String(r.source ?? r.docId),
+          sourceDocId: String(r.docId),
+          sourceRef: String(r.source ?? ''),
           risk: String(r.risk ?? ''),
           recommendedAction: String(r.recommendedAction ?? ''),
           relatedReq: String(r.relatedReq ?? ''),

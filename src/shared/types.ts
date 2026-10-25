@@ -16,6 +16,10 @@ export type WorkStatus = 'Atanmadı' | 'Atandı' | 'Devam ediyor' | 'Kapandı' |
 
 export interface BaseRow {
   id: string;
+  /** Silinme zamanı (ISO). Dolu ise kayıt silinmiştir; satır dosyada kalır, numarası tekrar verilmez. */
+  deletedAt: string;
+  deletedBy: string;
+  deleteReason: string;
 }
 
 /** Gereksinim ve açık konuların ortak atama ve Planner alanları. */
@@ -89,7 +93,10 @@ export interface RequirementRow extends BaseRow, Assignable {
   evidenceType: string;
   /** Kanıtın nasıl sunulacağı: beklenen doküman, kayıt, rapor. */
   evidence: string;
-  source: string;
+  /** Kaynak doküman (DOC-001). */
+  sourceDocId: string;
+  /** Doküman içindeki yer: sayfa, madde, ölçü no, e-posta tarihi. */
+  sourceRef: string;
   confidence: Confidence;
   dataStatus: DataStatus;
   approval: Approval;
@@ -99,7 +106,8 @@ export interface RequirementRow extends BaseRow, Assignable {
 export interface IssueRow extends BaseRow, Assignable {
   description: string;
   priority: 'Critical' | 'Important' | 'Optional' | '';
-  source: string;
+  sourceDocId: string;
+  sourceRef: string;
   risk: string;
   relatedReq: string;
   recommendedAction: string;
@@ -123,8 +131,24 @@ export interface SyncLogEntry {
   kind: 'ok' | 'warn' | 'err';
 }
 
+export type ChangeAction = 'Oluşturuldu' | 'Değişti' | 'Silindi' | 'Geri yüklendi';
+
+/** Değişiklik günlüğü kaydı: kim, ne zaman, hangi kaydın hangi alanını değiştirdi. */
+export interface ChangeEntry {
+  at: string;
+  /** Windows kullanıcı adı veya "Teams Planner" gibi otomatik kaynak. */
+  user: string;
+  table: TableKey;
+  rowId: string;
+  action: ChangeAction;
+  /** Değişen alan; oluşturma ve silmede boş. */
+  field: string;
+  from: string;
+  to: string;
+}
+
 export interface Project {
-  schema: 'gereksinim-takip/1';
+  schema: 'gereksinim-takip/2';
   meta: ProjectMeta;
   planner: PlannerSettings;
   documents: DocumentRow[];
@@ -132,6 +156,9 @@ export interface Project {
   issues: IssueRow[];
   people: PersonRow[];
   syncLog: SyncLogEntry[];
+  /** Tablo başına verilen en büyük numara; silinen kaydın numarası tekrar verilmez. */
+  seq: Record<TableKey, number>;
+  history: ChangeEntry[];
 }
 
 export type TableKey = 'documents' | 'requirements' | 'issues' | 'people';
