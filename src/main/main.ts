@@ -10,6 +10,7 @@ import { SCHEMA, type Member } from '../shared/model';
 import type { Project } from '../shared/types';
 import * as ai from './ai';
 import { Graph } from './graph';
+import { readCad } from './dxf';
 import { SUPPORTED } from './sources';
 import { checkForUpdates, initUpdater, installNow, type UpdateStatus } from './updater';
 
@@ -252,6 +253,7 @@ function registerIpc() {
     return r.filePaths.map((p) => ({ path: p, name: path.basename(p) }));
   });
   ipcMain.handle('file:open', (_e, p: string) => shell.openPath(p));
+  ipcMain.handle('file:read', async (_e, p: string) => new Uint8Array(await fs.readFile(p)));
 
   ipcMain.handle('ai:status', () => ({ configured: !!apiKey() || !!process.env.ANTHROPIC_API_KEY, fromEnv: !apiKey() && !!process.env.ANTHROPIC_API_KEY }));
   ipcMain.handle('ai:setKey', (_e, key: string) => {
@@ -270,6 +272,8 @@ function registerIpc() {
     }
   };
   ipcMain.handle('ai:requirements', wrap((a: Parameters<typeof ai.extractRequirements>[1]) => ai.extractRequirements({ apiKey: apiKey() }, a)));
+  ipcMain.handle('ai:cancel', () => ai.cancel());
+  ipcMain.handle('cad:svg', wrap(async (p: string) => (await readCad(await fs.readFile(p), path.basename(p))).svg));
 
   type Cfg = { clientId: string; tenantId: string };
   ipcMain.handle('planner:status', wrap(async (cfg: Cfg) => {

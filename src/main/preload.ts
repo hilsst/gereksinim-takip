@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SyncResult } from '../shared/planner';
 import type { Member } from '../shared/model';
+import type { DrawingImage } from '../shared/raster';
 import type { Project } from '../shared/types';
 import type { UpdateStatus } from './updater';
 
@@ -23,7 +24,10 @@ const api = {
   openPath: (p: string) => ipcRenderer.invoke('file:open', p),
   aiStatus: (): Promise<{ configured: boolean; fromEnv: boolean }> => ipcRenderer.invoke('ai:status'),
   aiSetKey: (key: string) => ipcRenderer.invoke('ai:setKey', key),
-  aiRequirements: (a: { filePath?: string; text?: string; docId: string; docLabel: string; existing: string[] }): Promise<Result<unknown>> => ipcRenderer.invoke('ai:requirements', a),
+  readFile: (p: string): Promise<Uint8Array> => ipcRenderer.invoke('file:read', p),
+  cadSvg: (p: string): Promise<Result<string | null>> => ipcRenderer.invoke('cad:svg', p),
+  aiRequirements: (a: { filePath?: string; text?: string; images?: DrawingImage[]; drawing?: boolean; docId: string; docLabel: string; existing: string[] }): Promise<Result<unknown>> => ipcRenderer.invoke('ai:requirements', a),
+  aiCancel: () => ipcRenderer.invoke('ai:cancel'),
   plannerStatus: (cfg: Cfg): Promise<Result<{ account: Account | null }>> => ipcRenderer.invoke('planner:status', cfg),
   plannerSignIn: (cfg: Cfg): Promise<Result<Account>> => ipcRenderer.invoke('planner:signIn', cfg),
   plannerSignOut: (cfg: Cfg): Promise<Result<void>> => ipcRenderer.invoke('planner:signOut', cfg),
