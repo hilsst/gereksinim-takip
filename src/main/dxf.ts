@@ -42,11 +42,35 @@ export interface DxfResult {
   texts: DxfText[];
   attribs: DxfText[];
   dims: DxfDim[];
+  gdt: DxfText[];
   svg: string | null;
   primitives: number;
 }
 
 const UNITS: Record<string, string> = { '1': 'inç', '2': 'feet', '4': 'mm', '5': 'cm', '6': 'm' };
+// AutoCAD TOLERANCE nesnesinde semboller GDT yazı tipinin harfleriyle yazılır.
+const GDT_FONT: Record<string, string> = {
+  a: 'Açısallık', b: 'Diklik', c: 'Düzlemsellik', d: 'Yüzey profili', e: 'Dairesellik', f: 'Paralellik', g: 'Silindiriklik',
+  h: 'Dairesel salgı', i: 'Simetri', j: 'Konum', k: 'Çizgi profili', r: 'Eş merkezlilik', t: 'Toplam salgı', u: 'Doğrusallık',
+  n: 'Ø', m: '(M)', l: '(L)', s: '(S)', p: '(P)', q: 'CL', o: '□',
+};
+
+/** TOLERANCE nesnesinin metnini okunur biçime çevirir: "Konum | Ø0.2 (M) | A | B | C". */
+export function gdtText(raw: string): string {
+  return cleanText(
+    raw
+      .replace(/\{\\F[Gg][Dd][Tt];([^}]*)\}/g, (_m, c: string) => [...c].map((ch) => GDT_FONT[ch.toLowerCase()] ?? ch).join(''))
+      .replace(/\^J/g, '\\P')
+      .replace(/%%v/gi, ' | '),
+  )
+    .replace(/(Açısallık|Diklik|Düzlemsellik|Yüzey profili|Dairesellik|Paralellik|Silindiriklik|Dairesel salgı|Simetri|Konum|Çizgi profili|Eş merkezlilik|Toplam salgı|Doğrusallık)(?=\S)/g, '$1 ')
+    .replace(/(\S)\((M|L|S|P)\)/g, '$1 ($2)')
+    .replace(/(\s*\|)+[ \t]*$/gm, '')
+    .replace(/\|[ \t]*\|/g, '|')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
 const DIM_KIND = ['Doğrusal', 'Hizalı', 'Açı', 'Çap', 'Yarıçap', 'Açı (3 nokta)', 'Koordinat'];
 
 function decode(buf: Buffer): string {
@@ -200,6 +224,7 @@ export function parseDxf(buf: Buffer): DxfResult {
   const texts: DxfText[] = [];
   const attribs: DxfText[] = [];
   const dims: DxfDim[] = [];
+  const gdt: DxfText[] = [];
   const prims: Prim[] = [];
   const MAX = 300_000;
 
@@ -298,6 +323,12 @@ export function parseDxf(buf: Buffer): DxfResult {
           }
           break;
         }
+        case 'TOLERANCE': {
+          const text = gdtText(get(r, 1) ?? '');
+          const dx = num(r, 11, 1);
+          textPrim(m, text, num(r, 10), num(r, 20), num(r, 40, 2.5) || 2.5, (Math.atan2(num(r, 21), dx) * 180) / Math.PI, 'start', gdt, { block: blockName }, layer);
+          break;
+        }
         case 'DIMENSION': {
           const type = num(r, 70) & 7;
           const meas = get(r, 42) !== undefined ? num(r, 42) : undefined;
@@ -337,6 +368,7 @@ export function parseDxf(buf: Buffer): DxfResult {
     texts,
     attribs,
     dims,
+    gdt,
     svg: toSvg(prims),
     primitives: prims.length,
   };
@@ -407,6 +439,10 @@ export function dxfSummary(name: string, d: DxfResult): string {
     out.push('', '## Antet ve blok öznitelikleri');
     for (const a of uniq(d.attribs, (t) => `${t.tag}|${t.text}`)) out.push(`- ${a.tag ?? ''}: ${a.text}${a.block ? ` [blok ${a.block}]` : ''}`);
   }
+  if (d.gdt.length) {
+    out.push('', `## Geometrik toleranslar – tolerans çerçeveleri (${d.gdt.length})`);
+    for (const g of byPos(d.gdt)) out.push(`- ${g.text.replace(/\n/g, ' / ')} · konum ${at(g)} · katman ${g.layer}`);
+  }
   if (d.dims.length) {
     out.push('', `## Ölçüler (${d.dims.length}) – görünen metin, tolerans dahil`);
     for (const m of byPos(d.dims).slice(0, 3000)) out.push(`- ${m.kind}: ${m.text}${m.measurement !== undefined ? ` (gerçek ölçü ${fmt(m.measurement)})` : ''} · konum ${at(m)} · katman ${m.layer}`);
@@ -416,7 +452,7 @@ export function dxfSummary(name: string, d: DxfResult): string {
     out.push('', `## Yazılar ve notlar (${texts.length}) – yukarıdan aşağıya`);
     for (const t of texts.slice(0, 4000)) out.push(`- ${at(t)} ${t.text.replace(/\n/g, ' / ')}${t.block ? ` [blok ${t.block}]` : ''} · katman ${t.layer}`);
   }
-  if (!d.attribs.length && !d.dims.length && !texts.length) out.push('', '(Dosyada okunabilir yazı veya ölçü bulunamadı.)');
+  if (!d.attribs.length && !d.dims.length && !d.gdt.length && !texts.length) out.push('', '(Dosyada okunabilir yazı veya ölçü bulunamadı.)');
   return out.join('\n');
 }
 

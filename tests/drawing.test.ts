@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { cleanText, dxfSummary, parseDxf } from '../src/main/dxf';
+import { cleanText, dxfSummary, gdtText, parseDxf } from '../src/main/dxf';
 import { toBlocks } from '../src/main/sources';
 import { grid, MAX_EDGE, needsRaster, pickEdge, TILE, tileBudget } from '../src/shared/raster';
 
@@ -29,6 +29,15 @@ describe('DXF teknik resim', () => {
     expect(notes).toContain('Ra 1.6');
     // Ölçü yazıları notlar arasında tekrar etmez
     expect(notes).not.toContain('H7');
+  });
+
+  it('AutoCAD TOLERANCE (GD&T çerçevesi) nesnelerini okur', () => {
+    expect(gdtText('{\\Fgdt;j}%%v{\\Fgdt;n}0.2{\\Fgdt;m}%%vA%%vB%%vC')).toBe('Konum | Ø0.2 (M) | A | B | C');
+    expect(gdtText('{\\Fgdt;b}%%v{\\Fgdt;n}0.03%%vA%%v%%v^J{\\Fgdt;g}%%v0.01%%v%%v%%v')).toBe('Diklik | Ø0.03 | A\nSilindiriklik | 0.01');
+    const dxf = ['0', 'SECTION', '2', 'ENTITIES', '0', 'TOLERANCE', '8', 'GDT', '1', '{\\Fgdt;c}%%v0.05', '10', '12', '20', '34', '0', 'ENDSEC', '0', 'EOF', ''].join('\n');
+    const d = parseDxf(Buffer.from(dxf));
+    expect(d.gdt.map((g) => g.text)).toEqual(['Düzlemsellik | 0.05']);
+    expect(dxfSummary('t.dxf', d)).toContain('## Geometrik toleranslar');
   });
 
   it('model alanını SVG olarak çizer', () => {
