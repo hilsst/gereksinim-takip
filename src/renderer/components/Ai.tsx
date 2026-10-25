@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { blankRow, nextId, NO_DATA } from '../../shared/model';
 import type { DocumentRow, IssueRow, Project, RequirementRow } from '../../shared/types';
 import { api, isDesktop } from '../api';
+import { needsRaster, type DrawingImage } from '../../shared/raster';
 import { useStore } from '../store';
 import { Modal } from './Modal';
 
@@ -14,7 +15,7 @@ interface Proposal {
 }
 
 const DOC_TYPE: Record<string, string> = {
-  pdf: 'Teknik resim', png: 'Teknik resim', jpg: 'Teknik resim', jpeg: 'Teknik resim', docx: 'Teknik şartname',
+  pdf: 'Teknik resim', dwg: 'Teknik resim', dxf: 'Teknik resim', png: 'Teknik resim', jpg: 'Teknik resim', jpeg: 'Teknik resim', tif: 'Teknik resim', tiff: 'Teknik resim', bmp: 'Teknik resim', docx: 'Teknik şartname',
   xlsx: 'Excel listesi', xlsm: 'Excel listesi', eml: 'E-posta', msg: 'E-posta', txt: 'Diğer', md: 'Diğer', csv: 'Excel listesi',
 };
 
@@ -79,8 +80,29 @@ export function useExtraction() {
     const out: Proposal = { docs: [], requirements: [], issues: [], errors: [] };
     const existing = existingSummary(project);
     for (const [i, j] of jobs.entries()) {
-      setBusy(`${j.doc.id} · ${j.doc.name} analiz ediliyor (${i + 1}/${jobs.length})…`);
-      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing });
+      const step = `${j.doc.id} · ${j.doc.name} (${i + 1}/${jobs.length})`;
+      const fileName = j.filePath?.split(/[\\/]/).pop() ?? '';
+      const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+      let images: DrawingImage[] | undefined;
+      if (j.filePath && needsRaster(ext, j.doc.docType)) {
+        setBusy(`${step}: teknik resim görüntüleri hazırlanıyor…`);
+        try {
+          const { prepareDrawing } = await import('../drawing'); // pdf.js yalnızca gerektiğinde yüklenir
+          const prep = await prepareDrawing(j.filePath, fileName);
+          images = prep.images;
+          if (prep.note) out.errors.push(`${j.doc.id}: ${prep.note}`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          // DWG çevrilemediyse metin de çıkarılamaz; diğer durumlarda dosyanın kendisiyle devam edilir.
+          if (ext === 'dwg' || ext === 'dxf') {
+            out.errors.push(`${j.doc.id} ${j.doc.name}: ${msg}`);
+            continue;
+          }
+          out.errors.push(`${j.doc.id}: görüntüler hazırlanamadı (${msg}); dosya olduğu gibi gönderildi.`);
+        }
+      }
+      setBusy(`${step}: Claude okuyor${images?.length ? ` (${images.length} görüntü)` : ''}…`);
+      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing });
       if (!r.ok) {
         out.errors.push(`${j.doc.id} ${j.doc.name}: ${r.error}`);
         continue;
@@ -93,7 +115,7 @@ export function useExtraction() {
     }
     setBusy(null);
     if (!out.requirements.length && !out.issues.length) {
-      toast(out.errors.length ? `AI hatası: ${out.errors.join(' · ')}` : 'AI yeni gereksinim bulmadı.', out.errors.length ? 'err' : 'warn');
+      toast(out.errors.length ? `AI hatası: ${out.errors.join(' · ')}` : 'AI bu dokümandan yeni gereksinim çıkarmadı.', out.errors.length ? 'err' : 'warn');
       return;
     }
     setProposal(out);
@@ -109,7 +131,10 @@ export function useExtraction() {
               <div>
                 <b>Claude dokümanı okuyor</b>
                 <div className="muted">{busy}</div>
-                <div className="muted">Büyük dosyalarda birkaç dakika sürebilir.</div>
+                <Elapsed />
+                <button className="btn" onClick={() => void api.aiCancel()}>
+                  İptal
+                </button>
               </div>
             </div>
           </div>
@@ -120,6 +145,15 @@ export function useExtraction() {
   );
 
   return { upload, fromText, dialogs, busy: !!busy };
+}
+
+function Elapsed() {
+  const [s, setS] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setS((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return <div className="muted">Geçen süre {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')} · Büyük teknik resimlerde birkaç dakika sürebilir.</div>;
 }
 
 function ProposalDialog({ proposal, onClose }: { proposal: Proposal; onClose: () => void }) {

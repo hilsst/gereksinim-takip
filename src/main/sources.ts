@@ -1,5 +1,6 @@
 // Yüklenen kaynak dosyaları Claude içerik bloklarına çevirir: PDF ve görseller olduğu gibi,
-// Word / Excel / e-posta metne dönüştürülerek gönderilir. E-posta ekleri de aynı kurallarla işlenir.
+// Word / Excel / e-posta / DXF-DWG metne dönüştürülerek gönderilir. E-posta ekleri de aynı kurallarla işlenir.
+// Teknik resimlerin yüksek çözünürlüklü görüntüleri arayüzde hazırlanır (renderer/drawing.ts).
 import type Anthropic from '@anthropic-ai/sdk';
 import MsgReader from '@kenjiuno/msgreader';
 import ExcelJS from 'exceljs';
@@ -7,11 +8,13 @@ import { simpleParser } from 'mailparser';
 import mammoth from 'mammoth';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { dxfSummary, readCad } from './dxf';
 
 type Block = Anthropic.ContentBlockParam;
 type Json = Record<string, unknown>;
 
-export const SUPPORTED = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'docx', 'xlsx', 'xlsm', 'csv', 'txt', 'md', 'eml', 'msg', 'htm', 'html'];
+export const SUPPORTED = ['pdf', 'dwg', 'dxf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'docx', 'xlsx', 'xlsm', 'csv', 'txt', 'md', 'eml', 'msg', 'htm', 'html'];
+const MAX_IMAGE_B64 = 5 * 1024 * 1024; // API görsel sınırı
 
 const IMAGE: Record<string, 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'> = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
@@ -71,7 +74,13 @@ const text = (t: string): Block => ({ type: 'text', text: t });
 export async function toBlocks(buf: Buffer, name: string, depth = 0): Promise<Block[]> {
   const ext = path.extname(name).toLowerCase();
   if (ext === '.pdf') return [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') }, title: name }];
-  if (IMAGE[ext]) return [{ type: 'image', source: { type: 'base64', media_type: IMAGE[ext], data: buf.toString('base64') } }, text(`Görsel dosya: ${name}`)];
+  if (IMAGE[ext]) {
+    const data = buf.toString('base64');
+    if (data.length > MAX_IMAGE_B64) throw new Error(`${name}: görsel 5 MB sınırını aşıyor. Dosyayı ayrıca doküman olarak yükleyin; uygulama onu bölgelere ayırarak gönderir.`);
+    return [{ type: 'image', source: { type: 'base64', media_type: IMAGE[ext], data } }, text(`Görsel dosya: ${name}`)];
+  }
+  if (ext === '.dxf' || ext === '.dwg') return [text(dxfSummary(name, await readCad(buf, name)))];
+  if (ext === '.tif' || ext === '.tiff' || ext === '.bmp') throw new Error(`${name}: bu görsel biçimi e-posta eki olarak okunamıyor. Dosyayı ayrıca doküman olarak yükleyin.`);
   if (ext === '.docx') {
     const { value } = await mammoth.convertToHtml({ buffer: buf });
     return [text(`Word dosyası: ${name}\n${htmlToText(value)}`)];

@@ -1,6 +1,6 @@
 # Gereksinim Takip
 
-Müşteri dokümanlarından (Word, Excel, PDF teknik resim, görsel, Outlook e-postası) gereksinim listesi ve açık konular çıkaran, her gereksinime kanıt yöntemi yazan, gereksinimleri tasarım / konfigürasyon / imalat mühendislerine miatla atayan ve atamaları **Teams Planner** ile senkron tutan masaüstü uygulaması.
+Müşteri dokümanlarından (Word, Excel, PDF / DXF / DWG teknik resim, görsel, Outlook e-postası) gereksinim listesi ve açık konular çıkaran, her gereksinime kanıt yöntemi yazan, gereksinimleri tasarım / konfigürasyon / imalat mühendislerine miatla atayan ve atamaları **Teams Planner** ile senkron tutan masaüstü uygulaması.
 
 Gereksinim ve açık konu mantığı FMEA Studio V4.6 ile aynıdır (REQ / ISS kimlikleri, "VERİ YOK – doğrulanmalı", kaynak gösterme, "AI Proposed" onay akışı); iki uygulama ileride bu kimlikler üzerinden bağlanacaktır.
 
@@ -33,7 +33,9 @@ Kurulu sürüm, FMEA Studio’daki gibi kendini günceller: açılışta GitHub 
 | 6 | Geçmiş | Değişiklik günlüğü: kim (Windows kullanıcı adı), ne zaman, hangi kaydın hangi alanı, eski ve yeni değer. Planner kapanışları “Teams Planner” adıyla yazılır. |
 | – | Özet | Sayaçlar ve kişi bazında açık / gecikmiş / zamanında kapanan oranı. |
 
-Desteklenen dosyalar: `.docx`, `.xlsx`/`.xlsm`, `.pdf`, `.png`/`.jpg`, `.msg`, `.eml` (e-posta ekleri de okunur), `.txt`/`.csv`/`.md`/`.html`. Eski `.doc` / `.xls` biçimlerini önce yeni biçimde kaydedin.
+Desteklenen dosyalar: `.docx`, `.xlsx`/`.xlsm`, `.pdf`, `.dxf`, `.dwg`, `.png`/`.jpg`/`.tif`/`.bmp`, `.msg`, `.eml` (e-posta ekleri de okunur), `.txt`/`.csv`/`.md`/`.html`. Eski `.doc` / `.xls` biçimlerini önce yeni biçimde kaydedin.
+
+**Teknik resimler.** Türü "Teknik resim" olan PDF'ler ve tüm görseller (TIFF dahil) yüksek çözünürlükte işlenir ve her sayfa bir genel görünüm + örtüşen bölgeler (A1, A2, B1…) olarak Claude'a gönderilir; böylece A3–A0 resimlerdeki ölçü ve tolerans yazıları okunabilir. DXF dosyalarında ölçüler (görünen tolerans metniyle), notlar ve antet öznitelikleri doğrudan dosyadan okunur, çizim ayrıca görüntü olarak gönderilir. **DWG** için ücretsiz [ODA File Converter](https://www.opendesign.com/guestfiles/oda_file_converter) kurulu olmalıdır (varsayılan yere kurulduğunda uygulama kendisi bulur; farklı yerdeyse `ODA_FILE_CONVERTER` ortam değişkeniyle yolunu verin); kurulu değilse çizimi DXF veya PDF olarak kaydedip yükleyin. İşlem sürerken geçen süre görünür ve İptal edilebilir.
 
 ## Teams Planner senkronu
 
@@ -79,12 +81,15 @@ npm test             # Planner senkronu, dosya dönüştürme, özet, Excel test
 npm run typecheck
 npm run build && xvfb-run -a node tests/e2e/smoke.mjs ./shots   # uçtan uca duman testi
 xvfb-run -a node tests/e2e/faz1.mjs ./shots                       # silme, kalıcı numara, geçmiş, eski dosya yedeği
+xvfb-run -a node tests/e2e/teknik-resim.mjs ./shots resim.pdf plaka.dxf  # teknik resim hazırlama (sahte Claude sunucusuyla)
 npm run dist:win     # Windows paketi (Windows veya CI)
 ```
 
 Kod yapısı:
 
-- `src/main/sources.ts`: Word / Excel / e-posta / PDF → Claude içerik blokları
+- `src/main/sources.ts`: Word / Excel / e-posta / PDF / DXF → Claude içerik blokları
+- `src/main/dxf.ts`: DXF okuyucu (ölçü, not, antet, SVG çizim), DWG → DXF (ODA File Converter)
+- `src/renderer/drawing.ts`, `src/shared/raster.ts`: teknik resimleri sayfa görüntüsü + bölgelere ayırma (pdf.js, UTIF)
 - `src/main/ai.ts`: gereksinim + açık konu çıkarma (JSON şema)
 - `src/main/graph.ts`: Microsoft Graph istemcisi ve giriş (MSAL)
 - `src/shared/planner.ts`: Planner gönderme / kapanış çekme kuralları (ağdan bağımsız, testli)
