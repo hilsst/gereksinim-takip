@@ -18,8 +18,11 @@ const server = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
   req.on('end', () => {
-    requests.push(JSON.parse(body));
-    const text = JSON.stringify(reply);
+    const parsed = JSON.parse(body);
+    requests.push(parsed);
+    // 1. aşama (bölge dökümü) isteği sistem isteminden tanınır
+    const stage1 = JSON.stringify(parsed.system ?? '').includes('teknisyen');
+    const text = JSON.stringify(stage1 ? { items: [{ kind: 'Tolerans çerçevesi', text: '⌖ | Ø0.2 Ⓜ | A | B | C', meaning: 'Konum toleransı', attachedTo: '4X Ø8.5', legibility: 'Net' }] } : reply);
     const ev = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.end(
@@ -61,7 +64,14 @@ for (const f of files) {
     win.waitForSelector('.toast.err, .toast.warn', { timeout: 120_000 }).then(async (t) => `toast: ${await t.innerText()}`),
   ]);
   await win.screenshot({ path: path.join(out, `tr-${path.basename(f)}.png`) });
-  const req = requests[before];
+  const mine = requests.slice(before);
+  const stage1 = mine.filter((r) => JSON.stringify(r.system ?? '').includes('teknisyen'));
+  const req = mine.find((r) => !stage1.includes(r));
+  if (stage1[0]) {
+    const leg = stage1[0].messages[0].content.find((b) => b.type === 'image');
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, 'gdt-rehber.png'), Buffer.from(leg.source.data, 'base64'));
+  }
   const content = req?.messages?.[0]?.content ?? [];
   const imgs = content.filter((b) => b.type === 'image');
   const dir = path.join(out, path.basename(f));
@@ -74,7 +84,7 @@ for (const f of files) {
   }
   const texts = content.filter((b) => b.type === 'text').map((b) => b.text);
   fs.writeFileSync(path.join(dir, 'metin.txt'), texts.join('\n\n----\n\n'));
-  results.push({ file: path.basename(f), done, images: imgs.length, documents: content.filter((b) => b.type === 'document').length, bytes: JSON.stringify(req ?? {}).length, drawingPrompt: texts.some((t) => t.startsWith('Bu bir teknik resim')) });
+  results.push({ file: path.basename(f), done, stage1Calls: stage1.length, stage1Images: stage1[0]?.messages[0].content.filter((b) => b.type === 'image').length ?? 0, transcriptInStage2: texts.some((t) => t.startsWith('## Bölge dökümleri')), pdfTextLayer: texts.some((t) => t.startsWith('## PDF metin katmanı')), images: imgs.length, documents: content.filter((b) => b.type === 'document').length, bytes: JSON.stringify(req ?? {}).length, drawingPrompt: texts.some((t) => t.startsWith('Bu bir teknik resim')) });
   if (done === 'öneri') await win.click('.modal-foot button:has-text("Vazgeç")');
   await win.waitForSelector('.toast.err, .toast.warn', { state: 'detached', timeout: 15_000 }).catch(() => undefined);
 }

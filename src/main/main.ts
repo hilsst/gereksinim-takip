@@ -271,7 +271,13 @@ function registerIpc() {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   };
-  ipcMain.handle('ai:requirements', wrap((a: Parameters<typeof ai.extractRequirements>[1]) => ai.extractRequirements({ apiKey: apiKey() }, a)));
+  ipcMain.handle('ai:requirements', async (e, a: ai.ExtractInput) => {
+    try {
+      return { ok: true, data: await ai.extractRequirements({ apiKey: apiKey() }, a, (msg) => e.sender.send('ai:progress', msg)) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
   ipcMain.handle('ai:cancel', () => ai.cancel());
   ipcMain.handle('cad:svg', wrap(async (p: string) => (await readCad(await fs.readFile(p), path.basename(p))).svg));
 

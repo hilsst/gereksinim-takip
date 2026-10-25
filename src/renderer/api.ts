@@ -37,6 +37,7 @@ function browserFallback(): Api {
     cadSvg: fail,
     aiRequirements: fail,
     aiCancel: async () => undefined,
+    onAiProgress: noop,
     plannerStatus: async () => ({ ok: true as const, data: { account: null } }),
     plannerSignIn: fail,
     plannerSignOut: fail,

@@ -26,7 +26,14 @@ const api = {
   aiSetKey: (key: string) => ipcRenderer.invoke('ai:setKey', key),
   readFile: (p: string): Promise<Uint8Array> => ipcRenderer.invoke('file:read', p),
   cadSvg: (p: string): Promise<Result<string | null>> => ipcRenderer.invoke('cad:svg', p),
-  aiRequirements: (a: { filePath?: string; text?: string; images?: DrawingImage[]; drawing?: boolean; docId: string; docLabel: string; existing: string[] }): Promise<Result<unknown>> => ipcRenderer.invoke('ai:requirements', a),
+  aiRequirements: (a: { filePath?: string; text?: string; images?: DrawingImage[]; pdfText?: string; drawing?: boolean; docId: string; docLabel: string; existing: string[] }): Promise<Result<unknown>> => ipcRenderer.invoke('ai:requirements', a),
+  onAiProgress: (cb: (msg: string) => void) => {
+    const h = (_e: unknown, msg: string) => cb(msg);
+    ipcRenderer.on('ai:progress', h);
+    return () => {
+      ipcRenderer.removeListener('ai:progress', h);
+    };
+  },
   aiCancel: () => ipcRenderer.invoke('ai:cancel'),
   plannerStatus: (cfg: Cfg): Promise<Result<{ account: Account | null }>> => ipcRenderer.invoke('planner:status', cfg),
   plannerSignIn: (cfg: Cfg): Promise<Result<Account>> => ipcRenderer.invoke('planner:signIn', cfg),
