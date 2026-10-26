@@ -204,6 +204,8 @@ Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet")
 - Antet hücreleri ayrıdır: yan yana duran ölçek (ör. 1/3) ve sayfa (ör. 1/2) hücreleri çelişki ya da belirsizlik değildir. Antetin düzeni ve boş bırakılmış bilgi alanları (ağırlık, hacim) için en fazla bir Optional issue aç.
 - Montaj resminde standart parçaların (cıvata, somun, mapa) yeri parça resmindeki deliklerle tanımlıdır; bunlar için ayrı konum ölçüsü isteme.
 - Açılması gereken issue'lar resmin amacına göre kritik eksiklerdir; bunları atlama. Örnekler: kaldırma / taşıma aparatında taşıma kapasitesi (SWL) ve güvenlik katsayısı; korumasız karbon çeliğinde yüzey koruması (Astar / Boya "-"); bağlantı elemanlarında sıkma momenti ve kalite sınıfı; ölçüsü tek bir öğede gösterilen tekrarlı öğelerde adet ("4X") belirtilmemesi (Optional).
+- Ölçüsü tek bir öğede gösterilen tekrarlı öğeler (aynı çizilmiş delikler, köşe yarıçapları) için gereksinimi tüm öğeler için yaz (ör. "4 adet Ø18 delik"); adet eksikliği için tüm resimde TEK bir Optional issue aç, delik ve köşe için ayrı ayrı açma.
+- Poz balonunun lider çizgisi parçaya dolu bir nokta ile biter; bu nokta kaynak, temas ya da işaret değildir, issue açma.
 - Hiçbir bölgede tam okunamayan öğe için tek bir "okunamayan değer" issue'su yeter; dosya metninde değeri varsa issue açma.
 Gereksinim olmayanlar: çizen, tarih, onay, ölçek, birim notu (ör. "ölçüler mm, açılar derece"), izdüşüm gibi antet bilgileri (yalnızca parça no, revizyon ve malzeme konfigürasyon gereksinimidir); dokümanda yazmayan hesaplar ve yorumlar (ör. MMC bonus tolerans hesabı); "datumlar tanımlı olmalı" gibi genel ifadeler.
 Çerçeveli ölçüler (TED) her biri ayrı gereksinimdir; kabul kriterine "TED – tolerans ilgili GD&T çerçevesinde" yaz, "VERİ YOK" yazma.`;
