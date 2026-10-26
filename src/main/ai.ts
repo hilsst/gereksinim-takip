@@ -37,6 +37,7 @@ function obj(props: Record<string, unknown>): Json {
 }
 
 export const REQ_SCHEMA = obj({
+  document: obj({ number: str, revision: str, title: str, sameAs: str }),
   requirements: {
     type: 'array',
     items: obj({
@@ -190,7 +191,9 @@ Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet")
 - Bölgeler örtüşür; bölge kenarında kesilen öğe [Kesik] işaretlidir ve tam hali komşu bölgededir. [Kesik] ya da [Belirsiz] bir okuma ile tam okuma arasındaki fark çelişki DEĞİLDİR: tam okumayı kullan, issue açma. Çerçevenin bir bölgede "A|B", diğerinde "A|B|C" görünmesi kesilmedendir.
 - Dosyadan okunan tolerans çerçeveleri, TED işaretleri ve referans (datum) listesi kesindir; bölge dökümüyle farklıysa dosyadakini kullan. Bölge dökümünden yalnızca dosyada olmayan bilgiyi (ör. [sembol] hücresinin adı) al.
 - Bir referans harfi (A, B, C) resimde bir kez tanımlanır (dolu üçgenli kutu); aynı harfin birçok çerçevede kullanılması çelişki değildir. Aynı ölçü değerinin (ör. iki ayrı 80) farklı özelliklere ait olması da çelişki değildir.
-- Çelişki issue'su yalnızca iki kesin kaynak (dosya metni ya da iki "Net" okuma) aynı öğe için farklı değer veriyorsa açılır. Hiçbir bölgede tam okunamayan öğe için tek bir "okunamayan değer" issue'su yeter.`;
+- Çelişki issue'su yalnızca iki kesin kaynak (dosya metni ya da iki "Net" okuma) aynı öğe için farklı değer veriyorsa açılır. Hiçbir bölgede tam okunamayan öğe için tek bir "okunamayan değer" issue'su yeter.
+Gereksinim olmayanlar: çizen, tarih, onay, ölçek, birim, izdüşüm gibi antet bilgileri (yalnızca parça no, revizyon ve malzeme konfigürasyon gereksinimidir); dokümanda yazmayan hesaplar ve yorumlar (ör. MMC bonus tolerans hesabı); "datumlar tanımlı olmalı" gibi genel ifadeler.
+Çerçeveli ölçüler (TED) her biri ayrı gereksinimdir; kabul kriterine "TED – tolerans ilgili GD&T çerçevesinde" yaz, "VERİ YOK" yazma.`;
 
 const RASTER_ONLY = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff'];
 
@@ -204,6 +207,7 @@ export interface ExtractInput {
   docLabel: string;
   existing: string[];
   existingIssues?: string[];
+  existingDocs?: string[];
 }
 
 export async function extractRequirements(cfg: AiConfig, input: ExtractInput, progress: (msg: string) => void = () => undefined) {
@@ -240,6 +244,9 @@ Her gereksinimin kaynağını "${input.docId} / Sayfa x / Bölüm y / Ölçü z"
 Tip listesi: Functional, Performance, Dimensional, Material, Structural, Environmental, Safety, Reliability, Interface, Manufacturing, Inspection, Regulatory, Customer-specific, Configuration.
 Kabul kriteri dokümanda yoksa "VERİ YOK – doğrulanmalı" yaz. Çelişkileri, belirsizlikleri ve eksikleri issues listesine ekle; ilgili gereksinim varsa relatedReq alanına projedeki ID'sini yaz.
 Alanları kısa ve öz yaz.
+document alanına dokümanın kendi numarasını, revizyonunu ve adını yaz (teknik resimde antetten; yoksa boş bırak).
+Projedeki dokümanlar:\n${(input.existingDocs ?? []).join('\n') || '(yok)'}
+AYNI RESİM KURALI: Bu doküman listedeki bir dokümanla aynı numara ve revizyona sahipse aynı resmin başka bir formatıdır (PDF / DXF / PNG / DWG). O zaman sameAs alanına o dokümanın ID'sini yaz ve yalnızca farkları bildir: mevcut listede HİÇ karşılığı olmayan bir değer ya da not varsa gereksinim ekle; iki format aynı öğe için farklı değer gösteriyorsa issue aç. Mevcut bir gereksinimi yeniden ifade eden, birleştiren, bölen ya da ondan türetilen madde yazma. Fark yoksa iki liste de boş olmalıdır. Aynı resim değilse sameAs boş kalır.
 Projede zaten bulunan gereksinimler (tekrar etme; çelişki varsa issue aç):\n${input.existing.slice(0, 300).join('\n') || '(yok)'}
 Projede zaten açık olan konular (aynı konuyu tekrar açma; yeni bilgi varsa yeni bir konu olarak değil, yalnızca gerçekten farklıysa ekle):\n${(input.existingIssues ?? []).slice(0, 200).join('\n') || '(yok)'}`,
     });

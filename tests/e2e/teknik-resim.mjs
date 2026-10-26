@@ -13,7 +13,7 @@ fs.mkdirSync(out, { recursive: true });
 if (!files.length) throw new Error('Test edilecek dosya verin.');
 
 const requests = [];
-const reply = { requirements: [{ text: 'Plaka boyu 120 +0.2/-0.1 mm olmalıdır.', reqType: 'Dimensional', acceptance: '119.9–120.2 mm', evidenceType: 'Ölçüm', evidence: 'CMM raporu', discipline: 'Tasarım', source: 'test', confidence: 'High' }], issues: [] };
+const reply = { document: { number: 'FLN-3010', revision: 'A', title: 'Bağlantı flanşı', sameAs: '' }, requirements: [{ text: 'Plaka boyu 120 +0.2/-0.1 mm olmalıdır.', reqType: 'Dimensional', acceptance: '119.9–120.2 mm', evidenceType: 'Ölçüm', evidence: 'CMM raporu', discipline: 'Tasarım', source: 'test', confidence: 'High' }], issues: [] };
 const server = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
@@ -64,6 +64,7 @@ for (const f of files) {
     win.waitForSelector('.toast.err, .toast.warn', { timeout: 120_000 }).then(async (t) => `toast: ${await t.innerText()}`),
   ]);
   await win.screenshot({ path: path.join(out, `tr-${path.basename(f)}.png`) });
+  const sameAs = done === 'öneri' && (await win.locator('.modal:has-text("Aynı resmin farklı formatı")').count()) > 0;
   const mine = requests.slice(before);
   const stage1 = mine.filter((r) => JSON.stringify(r.system ?? '').includes('teknisyen'));
   const req = mine.find((r) => !stage1.includes(r));
@@ -84,7 +85,7 @@ for (const f of files) {
   }
   const texts = content.filter((b) => b.type === 'text').map((b) => b.text);
   fs.writeFileSync(path.join(dir, 'metin.txt'), texts.join('\n\n----\n\n'));
-  results.push({ file: path.basename(f), done, stage1Calls: stage1.length, stage1Images: stage1[0]?.messages[0].content.filter((b) => b.type === 'image').length ?? 0, transcriptInStage2: texts.some((t) => t.startsWith('## Bölge dökümleri')), pdfTextLayer: texts.some((t) => t.startsWith('## PDF metin katmanı')), images: imgs.length, documents: content.filter((b) => b.type === 'document').length, bytes: JSON.stringify(req ?? {}).length, drawingPrompt: texts.some((t) => t.startsWith('Bu bir teknik resim')) });
+  results.push({ file: path.basename(f), done, stage1Calls: stage1.length, stage1Images: stage1[0]?.messages[0].content.filter((b) => b.type === 'image').length ?? 0, transcriptInStage2: texts.some((t) => t.startsWith('## Bölge dökümleri')), pdfTextLayer: texts.some((t) => t.startsWith('## PDF metin katmanı')), images: imgs.length, documents: content.filter((b) => b.type === 'document').length, bytes: JSON.stringify(req ?? {}).length, drawingPrompt: texts.some((t) => t.startsWith('Bu bir teknik resim')), knownDocInPrompt: texts.some((t) => t.includes('no FLN-3010')), sameAs });
   if (done === 'öneri') await win.click('.modal-foot button:has-text("Vazgeç")');
   await win.waitForSelector('.toast.err, .toast.warn', { state: 'detached', timeout: 15_000 }).catch(() => undefined);
 }
@@ -92,4 +93,5 @@ for (const f of files) {
 console.log(JSON.stringify({ results, errors }, null, 2));
 await app.evaluate(({ app }) => app.exit(0));
 server.close();
-if (errors.length || results.some((r) => r.done !== 'öneri' || !r.drawingPrompt)) process.exit(1);
+// Aynı numara/revizyonlu ikinci resimden itibaren aynı resim olarak tanınmalı
+if (errors.length || results.some((r, i) => r.done !== 'öneri' || !r.drawingPrompt || r.sameAs !== i > 0)) process.exit(1);

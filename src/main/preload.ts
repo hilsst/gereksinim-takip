@@ -26,7 +26,7 @@ const api = {
   aiSetKey: (key: string) => ipcRenderer.invoke('ai:setKey', key),
   readFile: (p: string): Promise<Uint8Array> => ipcRenderer.invoke('file:read', p),
   cadSvg: (p: string): Promise<Result<string | null>> => ipcRenderer.invoke('cad:svg', p),
-  aiRequirements: (a: { filePath?: string; text?: string; images?: DrawingImage[]; pdfText?: string; drawing?: boolean; docId: string; docLabel: string; existing: string[]; existingIssues?: string[] }): Promise<Result<unknown>> => ipcRenderer.invoke('ai:requirements', a),
+  aiRequirements: (a: { filePath?: string; text?: string; images?: DrawingImage[]; pdfText?: string; drawing?: boolean; docId: string; docLabel: string; existing: string[]; existingIssues?: string[]; existingDocs?: string[] }): Promise<Result<unknown>> => ipcRenderer.invoke('ai:requirements', a),
   onAiProgress: (cb: (msg: string) => void) => {
     const h = (_e: unknown, msg: string) => cb(msg);
     ipcRenderer.on('ai:progress', h);
