@@ -5,7 +5,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import * as UTIF from 'utif2';
 import { gdtLegendSvg } from '../shared/gdtLegend';
-import { grid, MAX_EDGE, MAX_IMAGE_BYTES, MAX_IMAGES, pickEdge, PX_PER_MM, TEXT_PX, TILE, tileBudget, zone, type DrawingImage } from '../shared/raster';
+import { grid, MAX_EDGE, MAX_IMAGE_BYTES, MAX_IMAGES, MIN_PAGE_EDGE, pickEdge, PX_PER_MM, TEXT_PX, TILE, tileBudget, zone, type DrawingImage } from '../shared/raster';
 import { api } from './api';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -111,7 +111,7 @@ async function fromPdf(out: Collector, bytes: Uint8Array) {
       const long = Math.max(vp1.width, vp1.height);
       const edge = pickEdge(Math.min(vp1.width, vp1.height) / long, budget);
       // PDF sayfa boyutu nokta (1/72 inç) cinsindendir; sayfa kağıt boyutuna göre PX_PER_MM ile işlenir.
-      const scale = Math.min(edge / long, MAX_PDF_SCALE, Math.max(TILE / long, (PX_PER_MM * 25.4) / 72));
+      const scale = Math.min(edge / long, MAX_PDF_SCALE, Math.max(MIN_PAGE_EDGE / long, (PX_PER_MM * 25.4) / 72));
       const vp = page.getViewport({ scale });
       const { c, ctx } = canvas(vp.width, vp.height);
       await page.render({ canvas: c, canvasContext: ctx, viewport: vp, background: '#ffffff' }).promise;

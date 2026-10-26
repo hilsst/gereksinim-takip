@@ -186,6 +186,9 @@ Teknik resimden şunları gereksinim olarak çıkar:
 - Malzeme, ısıl işlem, yüzey işlem/kaplama/boya, sertlik.
 - Genel ve özel notlar (her not maddesi ayrı gereksinim), işaretleme/etiketleme, kaynak/perçin sembolleri.
 - Antet bilgileri: parça no, revizyon, malzeme, kütle, ölçek, standartlar — konfigürasyon gereksinimi olarak.
+- Genel tolerans tablosu (ör. DIN / ISO 2768 sınıfları M, C, V veya f, m, c, v): dolu daire, çarpı ya da işaretle seçilmiş sınıf geçerli sınıftır. Seçili sınıfı ve tablodaki değerlerini tek bir gereksinim olarak yaz (ör. "ISO 2768 V: 3-6 mm ±0.5, 6-30 mm ±1.0 …"); toleranssız ölçülerin kabul kriterinde bu sınıfa atıf yap.
+- Malzeme / parça listesi (Poz, parça no, ad, malzeme, adet): her satır ayrı bir konfigürasyon gereksinimidir (parça no, malzeme ve adet birlikte).
+- Birden çok sayfa / pafta varsa (ör. montaj resmi ve parça resmi) her sayfanın kendi antetindeki parça no'yu kaynağa yaz; document alanına ilk sayfanın (ana resmin) numarasını yaz.
 Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet"). Bulanık ya da okunamayan değeri tahmin etme; "VERİ YOK – doğrulanmalı" yaz ve issues listesine "okunamayan ölçü" olarak ekle.
 Çelişki kuralları (yanlış alarm vermemek için):
 - Bölgeler örtüşür; bölge kenarında kesilen öğe [Kesik] işaretlidir ve tam hali komşu bölgededir. [Kesik] ya da [Belirsiz] bir okuma ile tam okuma arasındaki fark çelişki DEĞİLDİR: tam okumayı kullan, issue açma. Çerçevenin bir bölgede "A|B", diğerinde "A|B|C" görünmesi kesilmedendir.
