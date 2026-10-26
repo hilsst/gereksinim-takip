@@ -41,6 +41,26 @@ describe('DXF teknik resim', () => {
     expect(dxfSummary('t.dxf', d)).toContain('## Geometrik toleranslar');
   });
 
+  it('çizgiyle çizilmiş tolerans çerçevelerini, referans işaretlerini ve TED ölçülerini tanır', () => {
+    const d = parseDxf(fs.readFileSync(path.join(__dirname, 'fixtures', 'flans-gdt.dxf')));
+    const rows = d.frames.map((f) => `${f.symbolCell ? '[sembol] | ' : ''}${f.cells.join(' | ')}${f.label ? ` @ ${f.label}` : ''}`);
+    expect(rows).toContain('[sembol] | Ø0.2 M | A | B | C @ 4X Ø8.5 +0.1/0');
+    expect(rows).toContain('[sembol] | Ø0.05 | A | B | C @ Ø30 H7 (+0.021/0)');
+    expect(rows).toContain('[sembol] | 0.01 @ Ø30 H7 (+0.021/0)');
+    expect(rows).toContain('[sembol] | 0.1 | A | B');
+    expect(d.frames).toHaveLength(9);
+    // Ø30 H7'nin üç satırı tek çerçeve
+    expect(new Set(d.frames.filter((f) => f.label?.startsWith('Ø30')).map((f) => f.stack)).size).toBe(1);
+    expect(d.datums.map((t) => t.text).sort()).toEqual(['A', 'B', 'C']);
+    expect(d.dims.filter((m) => m.basic).map((m) => m.text).sort()).toEqual(['10', '10', '40', '50', '60', '80']);
+    expect(d.dims.find((m) => m.text === '100')?.basic).toBeFalsy();
+    const s = dxfSummary('flans.dxf', d);
+    expect(s).toContain('## Referans (datum) işaretleri');
+    expect(s).toContain('80 [TED]');
+    // Antet hücreleri çerçeve sayılmaz
+    expect(rows.join('\n')).not.toContain('Parça');
+  });
+
   it('model alanını SVG olarak çizer', () => {
     const d = parseDxf(fixture);
     expect(d.svg).toMatch(/^<svg [^>]*viewBox="[^"]+"/);

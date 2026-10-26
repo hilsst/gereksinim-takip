@@ -1,6 +1,6 @@
 {
   "name": "gereksinim-takip",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "Dokümanlardan gereksinim listesi, atama ve Teams Planner takibi",
   "main": "dist/main/main.js",
   "scripts": {

@@ -5,7 +5,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import * as UTIF from 'utif2';
 import { gdtLegendSvg } from '../shared/gdtLegend';
-import { grid, MAX_EDGE, MAX_IMAGE_BYTES, MAX_IMAGES, pickEdge, TILE, tileBudget, zone, type DrawingImage } from '../shared/raster';
+import { grid, MAX_EDGE, MAX_IMAGE_BYTES, MAX_IMAGES, pickEdge, PX_PER_MM, TEXT_PX, TILE, tileBudget, zone, type DrawingImage } from '../shared/raster';
 import { api } from './api';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -110,7 +110,8 @@ async function fromPdf(out: Collector, bytes: Uint8Array) {
       const vp1 = page.getViewport({ scale: 1 });
       const long = Math.max(vp1.width, vp1.height);
       const edge = pickEdge(Math.min(vp1.width, vp1.height) / long, budget);
-      const scale = Math.min(edge / long, MAX_PDF_SCALE);
+      // PDF sayfa boyutu nokta (1/72 inç) cinsindendir; sayfa kağıt boyutuna göre PX_PER_MM ile işlenir.
+      const scale = Math.min(edge / long, MAX_PDF_SCALE, Math.max(TILE / long, (PX_PER_MM * 25.4) / 72));
       const vp = page.getViewport({ scale });
       const { c, ctx } = canvas(vp.width, vp.height);
       await page.render({ canvas: c, canvasContext: ctx, viewport: vp, background: '#ffffff' }).promise;
@@ -163,7 +164,10 @@ async function fromSvg(out: Collector, svg: string) {
   const vb = /viewBox="([^"]+)"/.exec(svg)?.[1].split(' ').map(Number) ?? [0, 0, 1, 1];
   const [w, h] = [vb[2], vb[3]];
   const long = Math.max(w, h);
-  const edge = pickEdge(Math.min(w, h) / long, tileBudget(1), MAX_EDGE);
+  // Ortanca yazı yüksekliği biliniyorsa yazılar ~TEXT_PX piksel olacak kadar büyütülür.
+  const textH = Number(/data-text-h="([^"]+)"/.exec(svg)?.[1]);
+  const byText = textH > 0 ? Math.max(TILE, (long / textH) * TEXT_PX) : MAX_EDGE;
+  const edge = Math.min(pickEdge(Math.min(w, h) / long, tileBudget(1), MAX_EDGE), byText);
   const { c, ctx } = canvas((w / long) * edge, (h / long) * edge);
   // Piksel boyutu SVG'nin kendisine verilir; böylece çizgiler (non-scaling-stroke) ölçekten bağımsız ince kalır.
   const sized = svg.replace(/^<svg ([^>]*?)width="[^"]*" height="[^"]*"/, `<svg $1width="${c.width}" height="${c.height}"`);

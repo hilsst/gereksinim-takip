@@ -23,6 +23,11 @@ export function existingSummary(p: Project): string[] {
   return p.requirements.filter((r) => !r.deletedAt).map((r) => `${r.id} [${r.reqType}] ${r.text} | Kabul: ${r.acceptance || 'VERİ YOK'}`);
 }
 
+/** Kapanmamış açık konular: aynı parçanın başka formattaki resmi yüklendiğinde aynı konu tekrar açılmasın. */
+export function existingIssueSummary(p: Project): string[] {
+  return p.issues.filter((r) => !r.deletedAt && r.status !== 'Resolved' && r.status !== 'Closed').map((r) => `${r.id} [${r.priority}] ${r.description}`);
+}
+
 export function useExtraction() {
   const { project, mutate, toast } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
@@ -79,6 +84,7 @@ export function useExtraction() {
   const run = async (jobs: { doc: DocumentRow; filePath?: string; text?: string }[]) => {
     const out: Proposal = { docs: [], requirements: [], issues: [], errors: [] };
     const existing = existingSummary(project);
+    const existingIssues = existingIssueSummary(project);
     for (const [i, j] of jobs.entries()) {
       const step = `${j.doc.id} · ${j.doc.name} (${i + 1}/${jobs.length})`;
       const fileName = j.filePath?.split(/[\\/]/).pop() ?? '';
@@ -105,7 +111,7 @@ export function useExtraction() {
       }
       setBusy(`${step}: Claude okuyor…`);
       const off = api.onAiProgress((msg) => setBusy(`${step}: ${msg}`));
-      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, pdfText, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing });
+      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, pdfText, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing, existingIssues });
       off();
       if (!r.ok) {
         out.errors.push(`${j.doc.id} ${j.doc.name}: ${r.error}`);
@@ -116,6 +122,7 @@ export function useExtraction() {
       out.requirements.push(...d.requirements.map((x) => ({ ...x, docId: j.doc.id })));
       out.issues.push(...d.issues.map((x) => ({ ...x, docId: j.doc.id })));
       existing.push(...d.requirements.map((x) => `(yeni) ${String(x.text)}`));
+      existingIssues.push(...d.issues.map((x) => `(yeni) ${String(x.description)}`));
     }
     setBusy(null);
     if (!out.requirements.length && !out.issues.length) {
