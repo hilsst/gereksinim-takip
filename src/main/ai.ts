@@ -185,7 +185,12 @@ Teknik resimden şunları gereksinim olarak çıkar:
 - Malzeme, ısıl işlem, yüzey işlem/kaplama/boya, sertlik.
 - Genel ve özel notlar (her not maddesi ayrı gereksinim), işaretleme/etiketleme, kaynak/perçin sembolleri.
 - Antet bilgileri: parça no, revizyon, malzeme, kütle, ölçek, standartlar — konfigürasyon gereksinimi olarak.
-Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet"). Bulanık ya da okunamayan değeri tahmin etme; "VERİ YOK – doğrulanmalı" yaz ve issues listesine "okunamayan ölçü" olarak ekle.`;
+Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet"). Bulanık ya da okunamayan değeri tahmin etme; "VERİ YOK – doğrulanmalı" yaz ve issues listesine "okunamayan ölçü" olarak ekle.
+Çelişki kuralları (yanlış alarm vermemek için):
+- Bölgeler örtüşür; bölge kenarında kesilen öğe [Kesik] işaretlidir ve tam hali komşu bölgededir. [Kesik] ya da [Belirsiz] bir okuma ile tam okuma arasındaki fark çelişki DEĞİLDİR: tam okumayı kullan, issue açma. Çerçevenin bir bölgede "A|B", diğerinde "A|B|C" görünmesi kesilmedendir.
+- Dosyadan okunan tolerans çerçeveleri, TED işaretleri ve referans (datum) listesi kesindir; bölge dökümüyle farklıysa dosyadakini kullan. Bölge dökümünden yalnızca dosyada olmayan bilgiyi (ör. [sembol] hücresinin adı) al.
+- Bir referans harfi (A, B, C) resimde bir kez tanımlanır (dolu üçgenli kutu); aynı harfin birçok çerçevede kullanılması çelişki değildir. Aynı ölçü değerinin (ör. iki ayrı 80) farklı özelliklere ait olması da çelişki değildir.
+- Çelişki issue'su yalnızca iki kesin kaynak (dosya metni ya da iki "Net" okuma) aynı öğe için farklı değer veriyorsa açılır. Hiçbir bölgede tam okunamayan öğe için tek bir "okunamayan değer" issue'su yeter.`;
 
 const RASTER_ONLY = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff'];
 
@@ -198,6 +203,7 @@ export interface ExtractInput {
   docId: string;
   docLabel: string;
   existing: string[];
+  existingIssues?: string[];
 }
 
 export async function extractRequirements(cfg: AiConfig, input: ExtractInput, progress: (msg: string) => void = () => undefined) {
@@ -234,7 +240,8 @@ Her gereksinimin kaynağını "${input.docId} / Sayfa x / Bölüm y / Ölçü z"
 Tip listesi: Functional, Performance, Dimensional, Material, Structural, Environmental, Safety, Reliability, Interface, Manufacturing, Inspection, Regulatory, Customer-specific, Configuration.
 Kabul kriteri dokümanda yoksa "VERİ YOK – doğrulanmalı" yaz. Çelişkileri, belirsizlikleri ve eksikleri issues listesine ekle; ilgili gereksinim varsa relatedReq alanına projedeki ID'sini yaz.
 Alanları kısa ve öz yaz.
-Projede zaten bulunan gereksinimler (tekrar etme; çelişki varsa issue aç):\n${input.existing.slice(0, 300).join('\n') || '(yok)'}`,
+Projede zaten bulunan gereksinimler (tekrar etme; çelişki varsa issue aç):\n${input.existing.slice(0, 300).join('\n') || '(yok)'}
+Projede zaten açık olan konular (aynı konuyu tekrar açma; yeni bilgi varsa yeni bir konu olarak değil, yalnızca gerçekten farklıysa ekle):\n${(input.existingIssues ?? []).slice(0, 200).join('\n') || '(yok)'}`,
     });
     return await ask(cfg, content, REQ_SCHEMA, { signal: ctrl.signal, effort: images.length ? 'medium' : 'high' });
   } finally {

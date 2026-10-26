@@ -27,6 +27,13 @@ export interface DxfText {
   layer: string;
   block?: string;
   tag?: string;
+  /** Yazının ortası (dünya koordinatı), yüksekliği ve açısı: çerçeve tespiti için. */
+  cx?: number;
+  cy?: number;
+  h?: number;
+  rot?: number;
+  /** Tolerans çerçevesi satırına veya referans işaretine dahil edildi. */
+  grouped?: boolean;
 }
 export interface DxfDim {
   text: string;
@@ -35,6 +42,14 @@ export interface DxfDim {
   layer: string;
   x: number;
   y: number;
+  /** Ölçü yazısı bir kutu içinde: ISO 1101 teorik tam ölçü (TED). */
+  basic?: boolean;
+}
+/** Eksene paralel çizgi parçası: yatayda a = y, [b, c] = x aralığı; dikeyde a = x, [b, c] = y aralığı. */
+interface Seg {
+  a: number;
+  b: number;
+  c: number;
 }
 export interface DxfResult {
   version: string;
@@ -43,8 +58,21 @@ export interface DxfResult {
   attribs: DxfText[];
   dims: DxfDim[];
   gdt: DxfText[];
+  /** Kutu içindeki yazılardan tespit edilen tolerans çerçevesi satırları ve referans (datum) işaretleri. */
+  frames: FrameRow[];
+  datums: DxfText[];
   svg: string | null;
   primitives: number;
+}
+export interface FrameRow {
+  cells: string[];
+  /** Solunda yazısız hücre var: sembol çizgiyle çizilmiş (görüntüden okunur). */
+  symbolCell: boolean;
+  x: number;
+  y: number;
+  /** Üst üste yığılmış çok satırlı çerçevenin ve üstündeki yazının (ör. "4X Ø8.5") ortak etiketi. */
+  label?: string;
+  stack?: number;
 }
 
 const UNITS: Record<string, string> = { '1': 'inç', '2': 'feet', '4': 'mm', '5': 'cm', '6': 'm' };
@@ -107,7 +135,7 @@ export function cleanText(s: string): string {
     .trim();
 }
 
-function records(src: string): { header: Map<string, string>; blocks: Map<string, Block>; ents: Rec[] } {
+function records(src: string): { header: Map<string, string>; blocks: Map<string, Block>; ents: Rec[]; layers: Map<string, string> } {
   const lines = src.split(/\r?\n/);
   const pairs: Pair[] = [];
   for (let i = 0; i + 1 < lines.length; i += 2) {
@@ -118,6 +146,7 @@ function records(src: string): { header: Map<string, string>; blocks: Map<string
   const header = new Map<string, string>();
   const blocks = new Map<string, Block>();
   const ents: Rec[] = [];
+  const layerRecs: Rec[] = [];
   let section = '';
   let block: Block | null = null;
   let parent: Rec | null = null;
@@ -136,6 +165,11 @@ function records(src: string): { header: Map<string, string>; blocks: Map<string
         continue;
       }
       if (section === 'HEADER') continue;
+      if (section === 'TABLES') {
+        // Katmanların çizgi tipi (gizli / eksen çizgisi) için yalnızca LAYER kayıtları
+        if (v === 'LAYER') layerRecs.push((cur = { type: v, pairs: [], children: [] }));
+        continue;
+      }
       if (section !== 'BLOCKS' && section !== 'ENTITIES') continue;
       if (v === 'BLOCK') {
         block = { name: '', base: [0, 0], ents: [] };
@@ -174,7 +208,9 @@ function records(src: string): { header: Map<string, string>; blocks: Map<string
     }
     cur.pairs.push([code, value]);
   }
-  return { header, blocks, ents };
+  const layers = new Map<string, string>();
+  for (const r of layerRecs) layers.set(get(r, 2) ?? '', (get(r, 6) ?? '').toUpperCase());
+  return { header, blocks, ents, layers };
 }
 
 const get = (r: Rec, code: number) => r.pairs.find((p) => p[0] === code)?.[1];
@@ -209,6 +245,9 @@ function fmt(n: number) {
 
 interface Prim {
   d?: string; // yol (dünya koordinatı)
+  dash?: 'hidden' | 'center';
+  fill?: boolean;
+  valign?: 'base' | 'bottom' | 'middle' | 'top';
   text?: string;
   x: number;
   y: number;
@@ -220,18 +259,37 @@ interface Prim {
 /** Tam DXF çözümlemesi: metin listesi ve model alanının SVG'si. */
 export function parseDxf(buf: Buffer): DxfResult {
   if (buf.subarray(0, 18).toString('latin1') === 'AutoCAD Binary DXF') throw new Error('İkili (binary) DXF desteklenmiyor. Dosyayı ASCII DXF olarak kaydedip tekrar yükleyin.');
-  const { header, blocks, ents } = records(decode(buf));
+  const { header, blocks, ents, layers } = records(decode(buf));
   const texts: DxfText[] = [];
   const attribs: DxfText[] = [];
   const dims: DxfDim[] = [];
   const gdt: DxfText[] = [];
+  const dimText = new Map<number, DxfText>();
   const prims: Prim[] = [];
+  const hs: Seg[] = [];
+  const vs: Seg[] = [];
   const MAX = 300_000;
 
+  // Çizgi tipi: nesnenin kendisi, BYLAYER ise katmanınki. Gizli ve eksen çizgileri kesikli çizilir.
+  const dashOf = (r: Rec): Prim['dash'] => {
+    let lt = (get(r, 6) ?? 'BYLAYER').toUpperCase();
+    if (lt === 'BYLAYER' || lt === 'BYBLOCK') lt = layers.get(get(r, 8) ?? '0') ?? '';
+    if (/HIDDEN|DASHED|GIZLI|VERDECK|^DASH/.test(lt)) return 'hidden';
+    if (/CENTER|CHAIN|DASHDOT|PHANTOM|EKSEN|DIVIDE/.test(lt)) return 'center';
+    return undefined;
+  };
+  let style: Pick<Prim, 'dash' | 'fill'> = {};
   const path2 = (m: M, pts: [number, number][], closed: boolean) => {
     if (pts.length < 2 || prims.length > MAX) return;
     const t = pts.map(([x, y]) => apply(m, x, y));
-    prims.push({ d: `M${t.map(([x, y]) => `${x} ${y}`).join('L')}${closed ? 'Z' : ''}`, x: t[0][0], y: t[0][1], h: 0, rot: 0, anchor: 'start' });
+    const ring = closed ? [...t, t[0]] : t;
+    for (let i = 1; i < ring.length; i++) {
+      const [[x0, y0], [x1, y1]] = [ring[i - 1], ring[i]];
+      const eps = 1e-6 * (1 + Math.abs(x0) + Math.abs(y0));
+      if (Math.abs(y1 - y0) <= eps && Math.abs(x1 - x0) > eps) hs.push({ a: y0, b: Math.min(x0, x1), c: Math.max(x0, x1) });
+      else if (Math.abs(x1 - x0) <= eps && Math.abs(y1 - y0) > eps) vs.push({ a: x0, b: Math.min(y0, y1), c: Math.max(y0, y1) });
+    }
+    prims.push({ d: `M${t.map(([x, y]) => `${x} ${y}`).join('L')}${closed ? 'Z' : ''}`, x: t[0][0], y: t[0][1], h: 0, rot: 0, anchor: 'start', ...style });
   };
   const arcPts = (cx: number, cy: number, rx: number, ry: number, rot: number, a0: number, a1: number) => {
     if (a1 <= a0) a1 += Math.PI * 2;
@@ -245,19 +303,28 @@ export function parseDxf(buf: Buffer): DxfResult {
     }
     return out;
   };
-  const textPrim = (m: M, text: string, x: number, y: number, h: number, rotDeg: number, anchor: Prim['anchor'], sink: DxfText[] | null, meta: Partial<DxfText>, layer: string) => {
+  // valign: yazı noktasının dikeyde yeri (taban çizgisi, alt, orta, üst)
+  const textPrim = (m: M, text: string, x: number, y: number, h: number, rotDeg: number, anchor: Prim['anchor'], sink: DxfText[] | null, meta: Partial<DxfText>, layer: string, valign: 'base' | 'bottom' | 'middle' | 'top' = 'base') => {
     if (!text) return;
     const [wx, wy] = apply(m, x, y);
     const scale = Math.hypot(m[0], m[1]);
     const rot = rotDeg + (Math.atan2(m[1], m[0]) * 180) / Math.PI;
-    if (prims.length <= MAX) prims.push({ text, x: wx, y: wy, h: h * scale || 2.5, rot, anchor });
-    sink?.push({ text, x: wx, y: wy, layer, ...meta });
+    const hh = h * scale || 2.5;
+    if (prims.length <= MAX) prims.push({ text, x: wx, y: wy, h: hh, rot, anchor, valign });
+    if (!sink) return;
+    // Yazının ortası: genişlik karakter sayısından yaklaşık hesaplanır.
+    const w2 = textHalfWidth(text, hh);
+    const dx = anchor === 'start' ? w2 : anchor === 'end' ? -w2 : 0;
+    const dy = valign === 'middle' ? 0 : valign === 'top' ? -hh / 2 : hh / 2;
+    const r = (rot * Math.PI) / 180;
+    sink.push({ text, x: wx, y: wy, layer, cx: wx + dx * Math.cos(r) - dy * Math.sin(r), cy: wy + dx * Math.sin(r) + dy * Math.cos(r), h: hh, rot, ...meta });
   };
 
   const walk = (list: Rec[], m: M, depth: number, blockName: string | undefined, sink: DxfText[] | null, paperOk: boolean) => {
     for (const r of list) {
       if (!paperOk && get(r, 67) === '1') continue;
       const layer = get(r, 8) ?? '0';
+      style = { dash: dashOf(r), fill: r.type === 'SOLID' || r.type === 'TRACE' };
       switch (r.type) {
         case 'LINE':
           path2(m, [[num(r, 10), num(r, 20)], [num(r, 11), num(r, 21)]], false);
@@ -297,14 +364,15 @@ export function parseDxf(buf: Buffer): DxfResult {
           const aligned = h !== 0 || num(r, 73) !== 0;
           const x = aligned ? num(r, 11) : num(r, 10);
           const y = aligned ? num(r, 21) : num(r, 20);
-          textPrim(m, cleanText(get(r, 1) ?? ''), x, y, num(r, 40, 2.5), num(r, 50), h === 1 || h === 4 ? 'middle' : h === 2 ? 'end' : 'start', sink, { block: blockName }, layer);
+          const v = num(r, 73);
+          textPrim(m, cleanText(get(r, 1) ?? ''), x, y, num(r, 40, 2.5), num(r, 50), h === 1 || h === 4 ? 'middle' : h === 2 ? 'end' : 'start', sink, { block: blockName }, layer, h === 4 || v === 2 ? 'middle' : v === 3 ? 'top' : v === 1 ? 'bottom' : 'base');
           break;
         }
         case 'MTEXT': {
           const att = num(r, 71, 1);
           const dx = get(r, 11) !== undefined ? num(r, 11) : 1;
           const rot = get(r, 50) !== undefined ? num(r, 50) : (Math.atan2(num(r, 21), dx) * 180) / Math.PI;
-          textPrim(m, cleanText(mtextRaw(r)), num(r, 10), num(r, 20), num(r, 40, 2.5), rot, (['start', 'middle', 'end'] as const)[(att - 1) % 3], sink, { block: blockName }, layer);
+          textPrim(m, cleanText(mtextRaw(r)), num(r, 10), num(r, 20), num(r, 40, 2.5), rot, (['start', 'middle', 'end'] as const)[(att - 1) % 3], sink, { block: blockName }, layer, att <= 3 ? 'top' : att <= 6 ? 'middle' : 'bottom');
           break;
         }
         case 'INSERT': {
@@ -346,6 +414,8 @@ export function parseDxf(buf: Buffer): DxfResult {
             }
           }
           const [x, y] = apply(m, num(r, 11), num(r, 21));
+          // Kutu tespiti için yazı yüksekliği ve açısı bloktaki yazıdan alınır.
+          if (text) dimText.set(dims.length, { text, x, y, layer, cx: x, cy: y, h: shown[0]?.h ?? 2.5, rot: shown[0]?.rot ?? 0 });
           if (text) dims.push({ text, kind: DIM_KIND[type] ?? 'Ölçü', measurement: meas, layer, x, y });
           break;
         }
@@ -362,6 +432,11 @@ export function parseDxf(buf: Buffer): DxfResult {
   if (paper.length) walk(paper, ID, 0, '(kağıt alanı)', texts, true);
   prims.length = modelPrims;
 
+  // Kutu içindeki yazılar: TED ölçüleri, çizgiyle çizilmiş tolerans çerçeveleri ve referans işaretleri
+  const boxes = boxFinder(hs, vs);
+  for (const [i, t] of dimText) if (boxes.boxed(t)) dims[i].basic = true;
+  const { frames, datums } = frameRows(texts, boxes);
+
   return {
     version: header.get('$ACADVER') ?? '',
     units: UNITS[header.get('$INSUNITS') ?? ''] ?? '',
@@ -369,9 +444,150 @@ export function parseDxf(buf: Buffer): DxfResult {
     attribs,
     dims,
     gdt,
+    frames,
+    datums,
     svg: toSvg(prims),
     primitives: prims.length,
   };
+}
+
+function textHalfWidth(text: string, h: number) {
+  const longest = Math.max(...text.split('\n').map((l) => l.length));
+  return (longest * h * 0.62) / 2;
+}
+
+interface Boxes {
+  /** Yazının dört yanında da yakın bir çizgi var mı (kutu / çerçeve hücresi içinde mi)? */
+  boxed(t: DxfText): boolean;
+  /** Yazının solundaki hücre sınırları (yakından uzağa x değerleri). */
+  leftEdges(t: DxfText): number[];
+}
+
+function boxFinder(hs: Seg[], vs: Seg[]): Boxes {
+  const H = [...hs].sort((p, q) => p.a - q.a);
+  const V = [...vs].sort((p, q) => p.a - q.a);
+  const lower = (arr: Seg[], v: number) => {
+    let lo = 0;
+    let hi = arr.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (arr[mid].a < v) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  // [a0, a1] aralığında olup [b0, b1]'i kapsayan parçalar
+  const find = (arr: Seg[], a0: number, a1: number, b0: number, b1: number) => {
+    const out: number[] = [];
+    for (let i = lower(arr, a0); i < arr.length && arr[i].a <= a1; i++) if (arr[i].b <= b0 && arr[i].c >= b1) out.push(arr[i].a);
+    return out;
+  };
+  // Yazı ekseninde: u = yazı yönü, v = yazıya dik. 90° döndürülmüş yazıda yataylar ile dikeyler yer değiştirir.
+  const frame = (t: DxfText) => {
+    const h = t.h ?? 2.5;
+    const w2 = textHalfWidth(t.text, h);
+    const vertical = Math.abs(Math.sin(((t.rot ?? 0) * Math.PI) / 180)) > 0.7;
+    const cx = t.cx ?? t.x;
+    const cy = t.cy ?? t.y;
+    return vertical
+      ? { across: V, along: H, cu: cy, cv: cx, w2, h }
+      : { across: H, along: V, cu: cx, cv: cy, w2, h };
+  };
+  return {
+    boxed(t) {
+      const { across, along, cu, cv, w2, h } = frame(t);
+      const span = Math.min(w2 * 0.5, h);
+      const above = find(across, cv + h * 0.4, cv + h * 1.6, cu - span, cu + span).length > 0;
+      const below = find(across, cv - h * 1.6, cv - h * 0.4, cu - span, cu + span).length > 0;
+      const left = find(along, cu - w2 - h * 2, cu - w2 * 0.6, cv - h * 0.3, cv + h * 0.3).length > 0;
+      const right = find(along, cu + w2 * 0.6, cu + w2 + h * 4, cv - h * 0.3, cv + h * 0.3).length > 0;
+      return above && below && left && right;
+    },
+    leftEdges(t) {
+      const { along, cu, cv, w2, h } = frame(t);
+      const xs = find(along, cu - w2 - h * 6, cu - w2 * 0.6, cv - h * 0.3, cv + h * 0.3).sort((p, q) => q - p);
+      return xs.filter((x, i) => i === 0 || xs[i - 1] - x > h * 0.3);
+    },
+  };
+}
+
+/** Kutu içindeki yazıları satırlara toplar: çok hücreli satır = tolerans çerçevesi, tek harfli kutu = referans işareti. */
+function frameRows(texts: DxfText[], boxes: Boxes): { frames: FrameRow[]; datums: DxfText[] } {
+  const cx = (t: DxfText) => t.cx ?? t.x;
+  const cy = (t: DxfText) => t.cy ?? t.y;
+  const th = (t: DxfText) => t.h ?? 2.5;
+  const flat = texts.filter((t) => t.cx !== undefined && !t.text.includes('\n') && t.text.length <= 24 && Math.abs(Math.sin(((t.rot ?? 0) * Math.PI) / 180)) < 0.2);
+  const boxed = flat.filter((t) => boxes.boxed(t)).sort((p, q) => cx(p) - cx(q));
+  const used = new Set<DxfText>();
+  interface Row extends FrameRow {
+    left: number;
+    right: number;
+    h: number;
+  }
+  const rows: Row[] = [];
+  const datums: DxfText[] = [];
+  for (const t of boxed) {
+    if (used.has(t)) continue;
+    // Aynı hizadaki bitişik kutulu yazılar bir satırdır.
+    const row = [t];
+    used.add(t);
+    for (const u of boxed) {
+      if (used.has(u)) continue;
+      const last = row[row.length - 1];
+      const h = Math.max(th(last), th(u));
+      const gap = cx(u) - textHalfWidth(u.text, th(u)) - (cx(last) + textHalfWidth(last.text, th(last)));
+      if (Math.abs(cy(u) - cy(t)) <= h * 0.6 && gap > -h && gap <= h * 4) {
+        row.push(u);
+        used.add(u);
+      }
+    }
+    const edges = boxes.leftEdges(t);
+    // Sembol hücresi: ilk kutunun hemen solunda, yaklaşık kare, yazısız bir hücre.
+    // (Sembolün kendi dikey çizgileri de bulunabilir; bu yüzden en az bir kenarın uygun uzaklıkta olması yeterli.)
+    const symbolCell = edges.slice(1).some((e) => edges[0] - e >= th(t) * 1.5 && edges[0] - e <= th(t) * 3.5);
+    if (row.length === 1 && !symbolCell && /^[A-Z]{1,2}\d?$/.test(t.text)) {
+      t.grouped = true;
+      datums.push(t);
+      continue;
+    }
+    // Tablo / antet hücreleri çerçeve sayılmaz: ilk hücre tolerans değeri, diğerleri referans harfleri olmalı.
+    if (!/^[ØR]?\d*[.,]?\d+$/.test(t.text) || !row.slice(1).every((u) => /^[A-Z]{1,2}\d?$|^[A-Z]-[A-Z]$/.test(u.text)) || (row.length === 1 && !symbolCell)) {
+      for (const u of row.slice(1)) used.delete(u);
+      continue;
+    }
+    // Hücre içindeki kutusuz küçük yazılar (ör. daire içindeki M) önündeki hücreye katılır.
+    const x0 = cx(row[0]);
+    const x1 = cx(row[row.length - 1]);
+    const extra = flat.filter((u) => !used.has(u) && !boxed.includes(u) && cx(u) > x0 && cx(u) < x1 && Math.abs(cy(u) - cy(t)) <= th(t) * 0.6);
+    const cells: string[] = [];
+    for (const c of [...row, ...extra].sort((p, q) => cx(p) - cx(q))) {
+      c.grouped = true;
+      if (extra.includes(c) && cells.length) cells[cells.length - 1] += ` ${c.text}`;
+      else cells.push(c.text);
+    }
+    rows.push({ cells, symbolCell, x: t.x, y: cy(t), left: edges[0] ?? x0, right: x1, h: th(t) });
+  }
+  // Üst üste yığılmış satırlar (aynı sol kenar, satır yüksekliği kadar aralık) tek çerçevedir; üstündeki kutusuz yazı etiketidir.
+  rows.sort((p, q) => q.y - p.y);
+  let stack = 0;
+  for (const top of rows) {
+    if (top.stack) continue;
+    top.stack = ++stack;
+    let cur = top;
+    for (const f of rows) {
+      if (f.stack || Math.abs(f.left - top.left) > top.h * 0.5) continue;
+      if (cur.y - f.y > 0 && cur.y - f.y <= top.h * 3) {
+        f.stack = stack;
+        cur = f;
+      }
+    }
+    const label = texts
+      .filter((t) => !t.grouped && t.cx !== undefined && cy(t) - top.y > top.h * 0.6 && cy(t) - top.y <= top.h * 3.5)
+      .filter((t) => cx(t) + textHalfWidth(t.text, th(t)) > top.left && cx(t) - textHalfWidth(t.text, th(t)) < top.right)
+      .sort((p, q) => cy(p) - cy(q))[0];
+    if (label) for (const f of rows) if (f.stack === stack) f.label = label.text;
+  }
+  return { frames: rows.map(({ left: _l, right: _r, h: _h, ...f }) => f), datums };
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -403,10 +619,19 @@ function toSvg(prims: Prim[]): string | null {
   const pad = Math.max(w, h) * 0.02;
   const vb = [x0 - pad, -(y1 + pad), w + 2 * pad, h + 2 * pad].map((n) => +n.toFixed(4));
   const out: string[] = [];
-  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${vb[2]}" height="${vb[3]}">`);
+  const hs = prims.filter((p) => p.text).map((p) => p.h).sort((p, q) => p - q);
+  const textH = hs.length ? ` data-text-h="${+hs[Math.floor(hs.length / 2)].toFixed(4)}"` : '';
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" width="${vb[2]}" height="${vb[3]}"${textH}>`);
   out.push(`<rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="#fff"/>`);
   out.push('<g transform="scale(1,-1)" fill="none" stroke="#000" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round">');
-  for (const p of prims) if (p.d) out.push(`<path d="${p.d}" vector-effect="non-scaling-stroke"/>`);
+  // Kesikli çizgi aralıkları yazı yüksekliğine göre (çizim birimi cinsinden)
+  const unit = hs.length ? hs[Math.floor(hs.length / 2)] : Math.max(w, h) / 200;
+  const dashes = { hidden: `${+(unit * 1.2).toFixed(4)} ${+(unit * 0.6).toFixed(4)}`, center: `${+(unit * 3).toFixed(4)} ${+(unit * 0.6).toFixed(4)} ${+(unit * 0.4).toFixed(4)} ${+(unit * 0.6).toFixed(4)}` };
+  for (const p of prims) {
+    if (!p.d) continue;
+    const attrs = `${p.fill ? ' fill="#000"' : ''}${p.dash ? ` stroke-dasharray="${dashes[p.dash]}"` : ''}`;
+    out.push(`<path d="${p.d}" vector-effect="non-scaling-stroke"${attrs}/>`);
+  }
   out.push('</g><g font-family="Arial, Helvetica, sans-serif" fill="#000">');
   for (const p of prims) {
     if (!p.text) continue;
@@ -415,7 +640,8 @@ function toSvg(prims: Prim[]): string | null {
     const y = +(-p.y).toFixed(4);
     const tr = p.rot ? ` transform="rotate(${+(-p.rot).toFixed(2)} ${x} ${y})"` : '';
     const spans = lines.map((l, i) => `<tspan x="${x}" dy="${i ? +(p.h * 1.4).toFixed(4) : 0}">${esc(l)}</tspan>`).join('');
-    out.push(`<text x="${x}" y="${y}" font-size="${+p.h.toFixed(4)}" text-anchor="${p.anchor}"${tr}>${spans}</text>`);
+    const base = p.valign === 'middle' ? ' dominant-baseline="central"' : p.valign === 'top' ? ' dominant-baseline="hanging"' : p.valign === 'bottom' ? ' dominant-baseline="text-after-edge"' : '';
+    out.push(`<text x="${x}" y="${y}" font-size="${+p.h.toFixed(4)}" text-anchor="${p.anchor}"${base}${tr}>${spans}</text>`);
   }
   out.push('</g></svg>');
   return out.join('');
@@ -443,11 +669,21 @@ export function dxfSummary(name: string, d: DxfResult): string {
     out.push('', `## Geometrik toleranslar – tolerans çerçeveleri (${d.gdt.length})`);
     for (const g of byPos(d.gdt)) out.push(`- ${g.text.replace(/\n/g, ' / ')} · konum ${at(g)} · katman ${g.layer}`);
   }
-  if (d.dims.length) {
-    out.push('', `## Ölçüler (${d.dims.length}) – görünen metin, tolerans dahil`);
-    for (const m of byPos(d.dims).slice(0, 3000)) out.push(`- ${m.kind}: ${m.text}${m.measurement !== undefined ? ` (gerçek ölçü ${fmt(m.measurement)})` : ''} · konum ${at(m)} · katman ${m.layer}`);
+  if (d.frames.length) {
+    out.push('', `## Tolerans çerçeveleri – çizgiyle çizilmiş kutulardan okundu (${d.frames.length} satır)`);
+    out.push('Hücreler soldan sağa " | " ile ayrıldı. [sembol] = sembol çizgiyle çizilmiş, adını görüntüden/bölge dökümünden al. Tek harfli hücreler referanslardır (datum); tolerans değerinin yanındaki M/L/P/E daire içindeki değiştiricidir. Aynı "çerçeve" numaralı satırlar tek bir çok satırlı çerçevedir.');
+    for (const f of byPos(d.frames)) out.push(`- çerçeve ${f.stack}${f.label ? ` (üstündeki yazı: ${f.label})` : ''}: ${f.symbolCell ? '[sembol] | ' : ''}${f.cells.join(' | ')} · konum ${at(f)}`);
   }
-  const texts = uniq(byPos(d.texts), (t) => `${t.text}|${Math.round(t.x)}|${Math.round(t.y)}`);
+  if (d.datums.length) {
+    out.push('', '## Referans (datum) işaretleri – kutu içindeki tek harfler');
+    for (const t of byPos(d.datums)) out.push(`- ${t.text} · konum ${at({ x: t.cx ?? t.x, y: t.cy ?? t.y })}`);
+  }
+  if (d.dims.length) {
+    out.push('', `## Ölçüler (${d.dims.length}) – görünen metin, tolerans dahil; [TED] = kutu içinde, teorik tam ölçü`);
+    for (const m of byPos(d.dims).slice(0, 3000)) out.push(`- ${m.kind}: ${m.text}${m.basic ? ' [TED]' : ''}${m.measurement !== undefined ? ` (gerçek ölçü ${fmt(m.measurement)})` : ''} · konum ${at(m)} · katman ${m.layer}`);
+  }
+  // Çerçeve ve referans yazıları yukarıda satır olarak verildi; tek tek tekrar edilmez.
+  const texts = uniq(byPos(d.texts.filter((t) => !t.grouped)), (t) => `${t.text}|${Math.round(t.x)}|${Math.round(t.y)}`);
   if (texts.length) {
     out.push('', `## Yazılar ve notlar (${texts.length}) – yukarıdan aşağıya`);
     for (const t of texts.slice(0, 4000)) out.push(`- ${at(t)} ${t.text.replace(/\n/g, ' / ')}${t.block ? ` [blok ${t.block}]` : ''} · katman ${t.layer}`);

@@ -6,6 +6,10 @@ export const TILE = 1568;
 // Örtüşme, bölge kenarına denk gelen tolerans çerçevesinin en az bir bölgede bütün görünmesi için geniş tutulur.
 export const OVERLAP = 0.25;
 export const MAX_EDGE = 6400; // bir sayfanın işleneceği en büyük uzun kenar (piksel)
+// Hedef çözünürlük: 3.5 mm'lik yazı ~35 piksel. Daha yükseği okumayı iyileştirmez, yalnızca bölge sayısını
+// artırır ve tolerans çerçevelerinin bölge kenarında kesilme olasılığını yükseltir.
+export const PX_PER_MM = 10;
+export const TEXT_PX = 35;
 export const MAX_IMAGES = 80; // istek başına görüntü sınırı (API sınırı 100)
 export const MAX_IMAGE_BYTES = 16 * 1024 * 1024; // görüntülerin base64 toplamı
 
