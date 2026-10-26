@@ -11,6 +11,8 @@ interface Proposal {
   docs: DocumentRow[];
   /** Aynı resmin başka formatı olan dokümanlar: "DOC-003 → DOC-001 (FLN-3010 Rev A)" */
   sameAs: string[];
+  /** Aynı resmin ikinci+ formatı olan doküman ID'leri: önerileri varsayılan olarak seçili gelmez. */
+  twins: string[];
   requirements: (Json & { docId: string })[];
   issues: (Json & { docId: string })[];
   errors: string[];
@@ -21,6 +23,8 @@ const DOC_TYPE: Record<string, string> = {
   xlsx: 'Excel listesi', xlsm: 'Excel listesi', eml: 'E-posta', msg: 'E-posta', txt: 'Diğer', md: 'Diğer', csv: 'Excel listesi',
 };
 
+// Model bazen metnin başına kendi sıra numarasını yazar ("REQ-01: …"); projedeki ID ile karışmasın.
+const stripNo = (v: unknown) => String(v ?? '').replace(/^\s*(REQ|ISS)-?\d+\s*[:.–-]\s*/i, '');
 const sameNo = (a: string, b: string) => a.replace(/[\s_.-]/g, '').toUpperCase() === b.replace(/[\s_.-]/g, '').toUpperCase();
 
 export function existingSummary(p: Project): string[] {
@@ -86,7 +90,7 @@ export function useExtraction() {
   };
 
   const run = async (jobs: { doc: DocumentRow; filePath?: string; text?: string }[]) => {
-    const out: Proposal = { docs: [], sameAs: [], requirements: [], issues: [], errors: [] };
+    const out: Proposal = { docs: [], sameAs: [], twins: [], requirements: [], issues: [], errors: [] };
     // Doküman kimlikleri (numara + revizyon): aynı resmin farklı formatlarını tanımak için
     const known = project.documents.filter((d) => !d.deletedAt && d.docNumber).map((d) => ({ id: d.id, number: d.docNumber, revision: d.revision, label: `${d.name} (${d.filePath.split('.').pop() ?? d.docType})` }));
     const existing = existingSummary(project);
@@ -130,6 +134,7 @@ export function useExtraction() {
         // Numara ve revizyon dokümana yazılır; eşleşme modelin cevabından bağımsız olarak burada da kontrol edilir.
         const twin = known.find((k) => k.id !== j.doc.id && sameNo(k.number, info.number) && sameNo(k.revision, info.revision));
         const twinId = twin?.id ?? (known.some((k) => k.id === info.sameAs) ? info.sameAs : '');
+        if (twinId) out.twins.push(j.doc.id);
         if (twinId) out.sameAs.push(`${j.doc.id} → ${twinId} (${info.number}${info.revision ? ` Rev ${info.revision}` : ''})`);
         mutate((p) => {
           const row = p.documents.find((x) => x.id === j.doc.id);
@@ -140,8 +145,8 @@ export function useExtraction() {
         });
         known.push({ id: j.doc.id, number: info.number, revision: info.revision, label: `${j.doc.name} (${ext})` });
       }
-      out.requirements.push(...d.requirements.map((x) => ({ ...x, docId: j.doc.id })));
-      out.issues.push(...d.issues.map((x) => ({ ...x, docId: j.doc.id })));
+      out.requirements.push(...d.requirements.map((x) => ({ ...x, text: stripNo(x.text), docId: j.doc.id })));
+      out.issues.push(...d.issues.map((x) => ({ ...x, description: stripNo(x.description), docId: j.doc.id })));
       existing.push(...d.requirements.map((x) => `(yeni) ${String(x.text)}`));
       existingIssues.push(...d.issues.map((x) => `(yeni) ${String(x.description)}`));
     }
@@ -194,8 +199,9 @@ function Elapsed() {
 
 function ProposalDialog({ proposal, onClose }: { proposal: Proposal; onClose: () => void }) {
   const { mutate, toast } = useStore();
-  const [reqSel, setReqSel] = useState(proposal.requirements.map(() => true));
-  const [issSel, setIssSel] = useState(proposal.issues.map(() => true));
+  // Aynı resmin başka formatından gelen öneriler çoğunlukla okuma farkıdır; kullanıcı isterse seçer.
+  const [reqSel, setReqSel] = useState(proposal.requirements.map((r) => !proposal.twins.includes(r.docId)));
+  const [issSel, setIssSel] = useState(proposal.issues.map((r) => !proposal.twins.includes(r.docId)));
 
   const apply = () => {
     let added = 0;
@@ -269,7 +275,7 @@ function ProposalDialog({ proposal, onClose }: { proposal: Proposal; onClose: ()
       {proposal.errors.length > 0 && <div className="callout peach">Okunamayan dosyalar: {proposal.errors.join(' · ')}</div>}
       {proposal.sameAs.length > 0 && (
         <div className="callout">
-          Aynı resmin farklı formatı: {proposal.sameAs.join(' · ')}. Bu dokümanlar için yalnızca önceki formatta olmayan farklar listelenir.
+          Aynı resmin farklı formatı: {proposal.sameAs.join(' · ')}. Bu dokümanlar için yalnızca önceki formatta olmayan farklar listelenir ve seçili gelmez; gerçekten eksikse işaretleyin.
         </div>
       )}
       <h3>

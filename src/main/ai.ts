@@ -191,7 +191,10 @@ Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet")
 - Bölgeler örtüşür; bölge kenarında kesilen öğe [Kesik] işaretlidir ve tam hali komşu bölgededir. [Kesik] ya da [Belirsiz] bir okuma ile tam okuma arasındaki fark çelişki DEĞİLDİR: tam okumayı kullan, issue açma. Çerçevenin bir bölgede "A|B", diğerinde "A|B|C" görünmesi kesilmedendir.
 - Dosyadan okunan tolerans çerçeveleri, TED işaretleri ve referans (datum) listesi kesindir; bölge dökümüyle farklıysa dosyadakini kullan. Bölge dökümünden yalnızca dosyada olmayan bilgiyi (ör. [sembol] hücresinin adı) al.
 - Bir referans harfi (A, B, C) resimde bir kez tanımlanır (dolu üçgenli kutu); aynı harfin birçok çerçevede kullanılması çelişki değildir. Aynı ölçü değerinin (ör. iki ayrı 80) farklı özelliklere ait olması da çelişki değildir.
-- Çelişki issue'su yalnızca iki kesin kaynak (dosya metni ya da iki "Net" okuma) aynı öğe için farklı değer veriyorsa açılır. Hiçbir bölgede tam okunamayan öğe için tek bir "okunamayan değer" issue'su yeter.
+- Bölge dökümleri arasındaki okuma farkları ASLA issue değildir; bunlar okuma hatasıdır, resmin kusuru değil. Hangi okumanın doğru olduğuna dosya metni, yoksa en net okuma karar verir; emin değilsen gereksinimin güvenini Low yap. Issue yalnızca resmin kendisindeki eksik bilgi (ör. derinlik, kaplama kapsamı) ya da resimde açıkça görülen gerçek bir çelişki içindir.
+- Dosyadan okunan bir ölçüde [TED] yoksa o ölçü TED değildir; bölge dökümü aksini söylese de issue açma (resimde aynı değerde başka bir TED ölçü olabilir).
+- Referans (datum) yüzeyini yalnızca dolu üçgenli referans işaretinin bağlandığı yüzey belirler. Bir çerçevede "A" yazması, o çerçevenin bağlandığı yüzeyin A olduğu anlamına gelmez; bu bir çelişki değildir.
+- Hiçbir bölgede tam okunamayan öğe için tek bir "okunamayan değer" issue'su yeter; dosya metninde değeri varsa issue açma.
 Gereksinim olmayanlar: çizen, tarih, onay, ölçek, birim, izdüşüm gibi antet bilgileri (yalnızca parça no, revizyon ve malzeme konfigürasyon gereksinimidir); dokümanda yazmayan hesaplar ve yorumlar (ör. MMC bonus tolerans hesabı); "datumlar tanımlı olmalı" gibi genel ifadeler.
 Çerçeveli ölçüler (TED) her biri ayrı gereksinimdir; kabul kriterine "TED – tolerans ilgili GD&T çerçevesinde" yaz, "VERİ YOK" yazma.`;
 
@@ -243,7 +246,7 @@ export async function extractRequirements(cfg: AiConfig, input: ExtractInput, pr
 Her gereksinimin kaynağını "${input.docId} / Sayfa x / Bölüm y / Ölçü z" biçiminde ver (e-postada: "${input.docId} / <tarih> / <gönderen>").
 Tip listesi: Functional, Performance, Dimensional, Material, Structural, Environmental, Safety, Reliability, Interface, Manufacturing, Inspection, Regulatory, Customer-specific, Configuration.
 Kabul kriteri dokümanda yoksa "VERİ YOK – doğrulanmalı" yaz. Çelişkileri, belirsizlikleri ve eksikleri issues listesine ekle; ilgili gereksinim varsa relatedReq alanına projedeki ID'sini yaz.
-Alanları kısa ve öz yaz.
+Alanları kısa ve öz yaz. Metinlere kendi sıra numaranı (REQ-01 gibi) yazma; relatedReq'e yalnızca projedeki mevcut bir ID yaz, yeni gereksinimler için boş bırak.
 document alanına dokümanın kendi numarasını, revizyonunu ve adını yaz (teknik resimde antetten; yoksa boş bırak).
 Projedeki dokümanlar:\n${(input.existingDocs ?? []).join('\n') || '(yok)'}
 AYNI RESİM KURALI: Bu doküman listedeki bir dokümanla aynı numara ve revizyona sahipse aynı resmin başka bir formatıdır (PDF / DXF / PNG / DWG). O zaman sameAs alanına o dokümanın ID'sini yaz ve yalnızca farkları bildir: mevcut listede HİÇ karşılığı olmayan bir değer ya da not varsa gereksinim ekle; iki format aynı öğe için farklı değer gösteriyorsa issue aç. Mevcut bir gereksinimi yeniden ifade eden, birleştiren, bölen ya da ondan türetilen madde yazma. Fark yoksa iki liste de boş olmalıdır. Aynı resim değilse sameAs boş kalır.
