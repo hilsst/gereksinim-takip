@@ -10,6 +10,9 @@ export const MAX_EDGE = 6400; // bir sayfanın işleneceği en büyük uzun kena
 // artırır ve tolerans çerçevelerinin bölge kenarında kesilme olasılığını yükseltir.
 export const PX_PER_MM = 10;
 export const TEXT_PX = 35;
+// A3 resimler sıkça A4 sayfaya küçültülerek yazdırılır ("Microsoft Print to PDF"); sayfa A4 görünse de
+// en az A3 @ PX_PER_MM çözünürlükle işlenir, yoksa antet ve tolerans tablosu yazıları okunamaz.
+export const MIN_PAGE_EDGE = 4200;
 export const MAX_IMAGES = 80; // istek başına görüntü sınırı (API sınırı 100)
 export const MAX_IMAGE_BYTES = 16 * 1024 * 1024; // görüntülerin base64 toplamı
 
