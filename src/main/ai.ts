@@ -186,9 +186,9 @@ Teknik resimden şunları gereksinim olarak çıkar:
 - Malzeme, ısıl işlem, yüzey işlem/kaplama/boya, sertlik.
 - Genel ve özel notlar (her not maddesi ayrı gereksinim), işaretleme/etiketleme, kaynak/perçin sembolleri.
 - Antet bilgileri: parça no, revizyon, malzeme, kütle, ölçek, standartlar — konfigürasyon gereksinimi olarak.
-- Genel tolerans tablosu (ör. DIN / ISO 2768 sınıfları M, C, V veya f, m, c, v): dolu daire, çarpı ya da işaretle seçilmiş sınıf geçerli sınıftır. Seçili sınıfı ve tablodaki değerlerini tek bir gereksinim olarak yaz (ör. "ISO 2768 V: 3-6 mm ±0.5, 6-30 mm ±1.0 …"); toleranssız ölçülerin kabul kriterinde bu sınıfa atıf yap.
+- Genel tolerans tablosu (ör. DIN / ISO 2768 sınıfları M, C, V veya f, m, c, v): dolu daire, çarpı ya da işaretle seçilmiş sınıf geçerli sınıftır. Seçili sınıfı ve tablodaki değerlerini tek bir gereksinim olarak yaz (ör. "<resimdeki standart adı> V: 3-6 mm ±0.5, 6-30 mm ±1.0 …"); standart adını resimde yazdığı gibi yaz (DIN 2768 ise DIN 2768); toleranssız ölçülerin kabul kriterinde bu sınıfa atıf yap.
 - Toleransı yazılmamış her ölçüye (çap ve yarıçap dahil) genel tolerans uygulanır: ölçünün girdiği aralığı tablodan seç ve kabul kriterine tek değer yaz (ör. 125 → 120-400 aralığı → "125 ±2.5"). Genel tolerans tablosu ya da notu varken "tolerans yazılı değil", "VERİ YOK" yazma ve bunun için issue açma.
-- Malzeme / parça listesi (Poz, parça no, ad, malzeme, adet): her satır ayrı bir konfigürasyon gereksinimidir (parça no, malzeme ve adet birlikte).
+- Malzeme / parça listesi (Poz, parça no, ad, malzeme, adet): her satır ayrı bir konfigürasyon gereksinimidir (parça no, malzeme ve adet birlikte). Bir satırı başka maddelerde tekrar etme: aynı parçanın malzemesi için ayrı madde, "DIN580-M16 standardına uygun olmalı", "montaj şu parçaları içermeli" gibi maddeler yazma.
 - Birden çok sayfa / pafta varsa (ör. montaj resmi ve parça resmi) her sayfanın kendi antetindeki parça no'yu kaynağa yaz; document alanına ilk sayfanın (ana resmin) numarasını yaz.
 Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet"). Bulanık ya da okunamayan değeri tahmin etme; "VERİ YOK – doğrulanmalı" yaz ve issues listesine "okunamayan ölçü" olarak ekle.
 Çelişki kuralları (yanlış alarm vermemek için):
@@ -201,8 +201,11 @@ Kaynağa sayfa ve bölgeyi yaz (ör. "Sayfa 1 / Bölge B3 / Not 4" veya "Antet")
 - Resim çerçevesinin altındaki ya da dışındaki form numarası, form yayın tarihi, form revizyon no/tarihi (ör. "F25.09", "RELEASE DATE", "REVISION NO: 03") resim şablonuna aittir. Resmin revizyonu revizyon tablosundaki (REV.NO) ve antetteki değerdir; ikisi arasındaki fark çelişki değildir, issue açma.
 - Kesit / görünüş işaretleri referans (datum) DEĞİLDİR: kalın kısa çizgi ucu ve okla gösterilen harf (A … A) ve "A-A" başlıklı görünüş bir kesittir. Datum yalnızca dolu üçgene bağlı kutulu harftir; resimde datum yoksa GD&T çerçevesi de beklenmez, bunun için issue açma.
 - Resimde hiç izi olmayan prosesler (ör. kaynak sembolü yokken kaynak; ısıl işlem, sertlik) için "belirtilmemiş" issue'su açma. Tasarımcının seçtiği tolerans sınıfının yeterliliği hakkında görüş bildirme; yalnızca resimden hesaplanabilen somut bir uyumsuzluk (ör. delik ile cıvata çapı) varsa issue aç.
+- Antet hücreleri ayrıdır: yan yana duran ölçek (ör. 1/3) ve sayfa (ör. 1/2) hücreleri çelişki ya da belirsizlik değildir. Antetin düzeni ve boş bırakılmış bilgi alanları (ağırlık, hacim) için en fazla bir Optional issue aç.
+- Montaj resminde standart parçaların (cıvata, somun, mapa) yeri parça resmindeki deliklerle tanımlıdır; bunlar için ayrı konum ölçüsü isteme.
+- Açılması gereken issue'lar resmin amacına göre kritik eksiklerdir; bunları atlama. Örnekler: kaldırma / taşıma aparatında taşıma kapasitesi (SWL) ve güvenlik katsayısı; korumasız karbon çeliğinde yüzey koruması (Astar / Boya "-"); bağlantı elemanlarında sıkma momenti ve kalite sınıfı; ölçüsü tek bir öğede gösterilen tekrarlı öğelerde adet ("4X") belirtilmemesi (Optional).
 - Hiçbir bölgede tam okunamayan öğe için tek bir "okunamayan değer" issue'su yeter; dosya metninde değeri varsa issue açma.
-Gereksinim olmayanlar: çizen, tarih, onay, ölçek, birim, izdüşüm gibi antet bilgileri (yalnızca parça no, revizyon ve malzeme konfigürasyon gereksinimidir); dokümanda yazmayan hesaplar ve yorumlar (ör. MMC bonus tolerans hesabı); "datumlar tanımlı olmalı" gibi genel ifadeler.
+Gereksinim olmayanlar: çizen, tarih, onay, ölçek, birim notu (ör. "ölçüler mm, açılar derece"), izdüşüm gibi antet bilgileri (yalnızca parça no, revizyon ve malzeme konfigürasyon gereksinimidir); dokümanda yazmayan hesaplar ve yorumlar (ör. MMC bonus tolerans hesabı); "datumlar tanımlı olmalı" gibi genel ifadeler.
 Çerçeveli ölçüler (TED) her biri ayrı gereksinimdir; kabul kriterine "TED – tolerans ilgili GD&T çerçevesinde" yaz, "VERİ YOK" yazma.`;
 
 const RASTER_ONLY = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff'];
