@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cleanText, dxfSummary, gdtText, parseDxf } from '../src/main/dxf';
 import { toBlocks } from '../src/main/sources';
+import { gdtLegendSvg } from '../src/shared/gdtLegend';
 import { grid, MAX_EDGE, needsRaster, pickEdge, TILE, tileBudget } from '../src/shared/raster';
 
 const fixture = fs.readFileSync(path.join(__dirname, 'fixtures', 'plaka.dxf'));
@@ -93,5 +94,13 @@ describe('Resim bölgeleme', () => {
     expect(needsRaster('pdf', 'Teknik şartname')).toBe(false);
     expect(needsRaster('dwg', 'Diğer')).toBe(true);
     expect(needsRaster('docx', 'Teknik resim')).toBe(false);
+  });
+});
+
+describe('GD&T sembol rehberi', () => {
+  it('14 geometrik tolerans sembolünü ve değiştiricileri içerir', () => {
+    const svg = gdtLegendSvg();
+    for (const name of ['Doğrusallık', 'Düzlemsellik', 'Dairesellik', 'Silindiriklik', 'Çizgi profili', 'Yüzey profili', 'Paralellik', 'Diklik', 'Açısallık', 'Konum', 'Eş merkezlilik', 'Simetri', 'Dairesel salgı', 'Toplam salgı', 'MMC', 'LMC', 'TED']) expect(svg).toContain(name);
+    expect(svg).toMatch(/^<svg [^>]*width="\d+" height="\d+"/);
   });
 });

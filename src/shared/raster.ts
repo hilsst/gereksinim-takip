@@ -3,10 +3,11 @@
 // Bu yüzden her sayfa bir genel görünüm + örtüşen yüksek çözünürlüklü bölgeler olarak gönderilir.
 
 export const TILE = 1568;
+// Örtüşme, bölge kenarına denk gelen tolerans çerçevesinin en az bir bölgede bütün görünmesi için geniş tutulur.
+export const OVERLAP = 0.25;
 export const MAX_EDGE = 6400; // bir sayfanın işleneceği en büyük uzun kenar (piksel)
 export const MAX_IMAGES = 80; // istek başına görüntü sınırı (API sınırı 100)
 export const MAX_IMAGE_BYTES = 16 * 1024 * 1024; // görüntülerin base64 toplamı
-export const MAX_PDF_WITH_IMAGES = 9 * 1024 * 1024; // görüntülerle birlikte PDF'in kendisi de gönderilecekse üst sınır
 
 export const RASTER_EXT = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'dxf', 'dwg'];
 
@@ -29,6 +30,8 @@ export interface DrawingImage {
   label: string;
   data: string; // base64
   mediaType: 'image/png' | 'image/jpeg';
+  kind?: 'overview' | 'tile' | 'legend';
+  page?: number;
 }
 
 function axis(len: number, tile: number, overlap: number): [number, number][] {
@@ -39,8 +42,8 @@ function axis(len: number, tile: number, overlap: number): [number, number][] {
   return Array.from({ length: n }, (_v, i) => [Math.round(i * step), tile]);
 }
 
-/** w×h piksellik görüntüyü TILE boyutunda, %12 örtüşen bölgelere ayırır. Görüntü zaten küçükse boş döner. */
-export function grid(w: number, h: number, tile = TILE, overlap = 0.12): Tile[] {
+/** w×h piksellik görüntüyü TILE boyutunda, %25 örtüşen bölgelere ayırır. Görüntü zaten küçükse boş döner. */
+export function grid(w: number, h: number, tile = TILE, overlap = OVERLAP): Tile[] {
   if (w <= tile && h <= tile) return [];
   const xs = axis(w, tile, overlap);
   const ys = axis(h, tile, overlap);

@@ -84,12 +84,14 @@ export function useExtraction() {
       const fileName = j.filePath?.split(/[\\/]/).pop() ?? '';
       const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
       let images: DrawingImage[] | undefined;
+      let pdfText: string | undefined;
       if (j.filePath && needsRaster(ext, j.doc.docType)) {
         setBusy(`${step}: teknik resim görüntüleri hazırlanıyor…`);
         try {
           const { prepareDrawing } = await import('../drawing'); // pdf.js yalnızca gerektiğinde yüklenir
           const prep = await prepareDrawing(j.filePath, fileName);
           images = prep.images;
+          pdfText = prep.pdfText;
           if (prep.note) out.errors.push(`${j.doc.id}: ${prep.note}`);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -101,8 +103,10 @@ export function useExtraction() {
           out.errors.push(`${j.doc.id}: görüntüler hazırlanamadı (${msg}); dosya olduğu gibi gönderildi.`);
         }
       }
-      setBusy(`${step}: Claude okuyor${images?.length ? ` (${images.length} görüntü)` : ''}…`);
-      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing });
+      setBusy(`${step}: Claude okuyor…`);
+      const off = api.onAiProgress((msg) => setBusy(`${step}: ${msg}`));
+      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, pdfText, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing });
+      off();
       if (!r.ok) {
         out.errors.push(`${j.doc.id} ${j.doc.name}: ${r.error}`);
         continue;

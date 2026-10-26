@@ -4,6 +4,7 @@
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import * as UTIF from 'utif2';
+import { gdtLegendSvg } from '../shared/gdtLegend';
 import { grid, MAX_EDGE, MAX_IMAGE_BYTES, MAX_IMAGES, pickEdge, TILE, tileBudget, zone, type DrawingImage } from '../shared/raster';
 import { api } from './api';
 
@@ -45,24 +46,25 @@ function encode(c: HTMLCanvasElement): Pick<DrawingImage, 'data' | 'mediaType'> 
 
 class Collector {
   images: DrawingImage[] = [];
+  text: string[] = [];
   bytes = 0;
   skipped = 0;
-  push(label: string, c: HTMLCanvasElement) {
+  push(label: string, c: HTMLCanvasElement, kind: DrawingImage['kind'], page: number) {
     if (this.images.length >= MAX_IMAGES) return void this.skipped++;
     const e = encode(c);
     if (this.bytes + e.data.length > MAX_IMAGE_BYTES) return void this.skipped++;
     this.bytes += e.data.length;
-    this.images.push({ label, ...e });
+    this.images.push({ label, ...e, kind, page });
   }
 }
 
 /** Büyük kaynak görüntüyü genel görünüm + bölgeler olarak toplar. */
-function addPage(out: Collector, src: CanvasImageSource, w: number, h: number, title: string) {
+function addPage(out: Collector, src: CanvasImageSource, w: number, h: number, title: string, page: number) {
   const s = Math.min(1, TILE / Math.max(w, h));
   const ov = canvas(w * s, h * s);
   ov.ctx.drawImage(src, 0, 0, ov.c.width, ov.c.height);
   const tiles = grid(w, h);
-  out.push(`${title} – ${tiles.length ? 'genel görünüm (küçültülmüş; ayrıntılar bölge görüntülerinde)' : 'tam görüntü'}`, ov.c);
+  out.push(`${title} – ${tiles.length ? 'genel görünüm (küçültülmüş; ayrıntılar bölge görüntülerinde)' : 'tam görüntü'}`, ov.c, tiles.length ? 'overview' : 'tile', page);
   if (!tiles.length) return;
   const rows = Math.max(...tiles.map((t) => t.row)) + 1;
   const cols = Math.max(...tiles.map((t) => t.col)) + 1;
@@ -70,8 +72,31 @@ function addPage(out: Collector, src: CanvasImageSource, w: number, h: number, t
     const tc = canvas(t.w, t.h);
     tc.ctx.drawImage(src, t.x, t.y, t.w, t.h, 0, 0, t.w, t.h);
     if (ink(tc.ctx, t.w, t.h) < 0.00005) continue; // yalnızca tamamen boş bölgeler atlanır
-    out.push(`${title} – ${zone(t, rows, cols, w, h)}`, tc.c);
+    out.push(`${title} – ${zone(t, rows, cols, w, h)}`, tc.c, 'tile', page);
   }
+}
+
+/** PDF'teki gerçek metinleri (CATIA çıktılarında yazılar genelde metin olarak durur) sayfadaki konumlarıyla verir. */
+async function pdfText(page: pdfjs.PDFPageProxy, n: number, w: number, h: number): Promise<string[]> {
+  const tc = await page.getTextContent();
+  const vp = page.getViewport({ scale: 1 });
+  const items: { s: string; x: number; y: number }[] = [];
+  for (const it of tc.items) {
+    if (!('str' in it) || !it.str.trim()) continue;
+    const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
+    items.push({ s: it.str.trim(), x: (x / w) * 100, y: (y / h) * 100 });
+  }
+  // Aynı satırdaki parçalar birleştirilir (yukarıdan aşağıya, soldan sağa)
+  items.sort((a, b) => a.y - b.y || a.x - b.x);
+  const lines: { s: string; x: number; y: number; end: number }[] = [];
+  for (const it of items) {
+    const last = lines[lines.length - 1];
+    if (last && Math.abs(last.y - it.y) < 0.4 && it.x - last.end < 3) {
+      last.s += ` ${it.s}`;
+      last.end = it.x + it.s.length * 0.5;
+    } else lines.push({ ...it, end: it.x + it.s.length * 0.5 });
+  }
+  return lines.map((l) => `- Sayfa ${n} (yatay %${Math.round(l.x)}, dikey %${Math.round(l.y)}): ${l.s}`);
 }
 
 async function fromPdf(out: Collector, bytes: Uint8Array) {
@@ -89,8 +114,9 @@ async function fromPdf(out: Collector, bytes: Uint8Array) {
       const vp = page.getViewport({ scale });
       const { c, ctx } = canvas(vp.width, vp.height);
       await page.render({ canvas: c, canvasContext: ctx, viewport: vp, background: '#ffffff' }).promise;
-      addPage(out, c, c.width, c.height, `Sayfa ${i}/${doc.numPages}`);
+      addPage(out, c, c.width, c.height, `Sayfa ${i}/${doc.numPages}`, i);
       c.width = 0;
+      out.text.push(...(await pdfText(page, i, vp1.width, vp1.height)));
       page.cleanup();
     }
     if (doc.numPages > pages) out.skipped += doc.numPages - pages;
@@ -112,7 +138,7 @@ async function fromImage(out: Collector, bytes: Uint8Array, name: string) {
   const edge = pickEdge(Math.min(bmp.width, bmp.height) / Math.max(bmp.width, bmp.height), tileBudget(1));
   const c = fit(bmp, bmp.width, bmp.height, edge);
   bmp.close();
-  addPage(out, c, c.width, c.height, `Görsel ${name}`);
+  addPage(out, c, c.width, c.height, `Görsel ${name}`, 1);
 }
 
 async function fromTiff(out: Collector, bytes: Uint8Array) {
@@ -128,7 +154,7 @@ async function fromTiff(out: Collector, bytes: Uint8Array) {
     ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, rgba.byteLength), ifd.width, ifd.height), 0, 0);
     const edge = pickEdge(Math.min(c.width, c.height) / Math.max(c.width, c.height), tileBudget(pages));
     const f = edge < Math.max(c.width, c.height) ? fit(c, c.width, c.height, edge) : c;
-    addPage(out, f, f.width, f.height, `Sayfa ${i + 1}/${ifds.length}`);
+    addPage(out, f, f.width, f.height, `Sayfa ${i + 1}/${ifds.length}`, i + 1);
     c.width = 0;
   }
 }
@@ -141,16 +167,30 @@ async function fromSvg(out: Collector, svg: string) {
   const { c, ctx } = canvas((w / long) * edge, (h / long) * edge);
   // Piksel boyutu SVG'nin kendisine verilir; böylece çizgiler (non-scaling-stroke) ölçekten bağımsız ince kalır.
   const sized = svg.replace(/^<svg ([^>]*?)width="[^"]*" height="[^"]*"/, `<svg $1width="${c.width}" height="${c.height}"`);
-  const img = new Image();
-  img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(sized)))}`;
-  await img.decode();
-  ctx.drawImage(img, 0, 0, c.width, c.height);
-  addPage(out, c, c.width, c.height, 'Çizim (DXF model alanı)');
+  ctx.drawImage(await svgImage(sized), 0, 0, c.width, c.height);
+  addPage(out, c, c.width, c.height, 'Çizim (DXF model alanı)', 1);
 }
 
 export interface Prepared {
   images: DrawingImage[];
+  /** PDF metin katmanı (konumlu satırlar); yoksa boş. */
+  pdfText?: string;
   note?: string;
+}
+
+async function svgImage(svg: string): Promise<HTMLImageElement> {
+  const img = new Image();
+  img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+  await img.decode();
+  return img;
+}
+
+/** GD&T sembol rehberi görseli (her teknik resim isteğinde Claude'a referans olarak gider). */
+async function legend(): Promise<DrawingImage> {
+  const img = await svgImage(gdtLegendSvg());
+  const { c, ctx } = canvas(img.naturalWidth, img.naturalHeight);
+  ctx.drawImage(img, 0, 0);
+  return { label: 'GD&T sembol rehberi (çizimin parçası değildir; yalnızca sembolleri tanımak için)', ...encode(c), kind: 'legend' };
 }
 
 /** Dosyayı okuyup görüntülere çevirir. Hata olursa görüntüsüz devam edilebilmesi için not döner. */
@@ -168,5 +208,6 @@ export async function prepareDrawing(filePath: string, name: string): Promise<Pr
     else if (ext === 'tif' || ext === 'tiff') await fromTiff(out, bytes);
     else await fromImage(out, bytes, name);
   }
-  return { images: out.images, note: out.skipped ? `${out.skipped} görüntü/sayfa boyut sınırı nedeniyle gönderilmedi.` : undefined };
+  if (out.images.length) out.images.unshift(await legend());
+  return { images: out.images, pdfText: out.text.join('\n') || undefined, note: out.skipped ? `${out.skipped} görüntü/sayfa boyut sınırı nedeniyle gönderilmedi.` : undefined };
 }
