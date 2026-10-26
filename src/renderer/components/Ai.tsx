@@ -9,6 +9,8 @@ import { Modal } from './Modal';
 type Json = Record<string, unknown>;
 interface Proposal {
   docs: DocumentRow[];
+  /** Aynı resmin başka formatı olan dokümanlar: "DOC-003 → DOC-001 (FLN-3010 Rev A)" */
+  sameAs: string[];
   requirements: (Json & { docId: string })[];
   issues: (Json & { docId: string })[];
   errors: string[];
@@ -18,6 +20,8 @@ const DOC_TYPE: Record<string, string> = {
   pdf: 'Teknik resim', dwg: 'Teknik resim', dxf: 'Teknik resim', png: 'Teknik resim', jpg: 'Teknik resim', jpeg: 'Teknik resim', tif: 'Teknik resim', tiff: 'Teknik resim', bmp: 'Teknik resim', docx: 'Teknik şartname',
   xlsx: 'Excel listesi', xlsm: 'Excel listesi', eml: 'E-posta', msg: 'E-posta', txt: 'Diğer', md: 'Diğer', csv: 'Excel listesi',
 };
+
+const sameNo = (a: string, b: string) => a.replace(/[\s_.-]/g, '').toUpperCase() === b.replace(/[\s_.-]/g, '').toUpperCase();
 
 export function existingSummary(p: Project): string[] {
   return p.requirements.filter((r) => !r.deletedAt).map((r) => `${r.id} [${r.reqType}] ${r.text} | Kabul: ${r.acceptance || 'VERİ YOK'}`);
@@ -82,7 +86,9 @@ export function useExtraction() {
   };
 
   const run = async (jobs: { doc: DocumentRow; filePath?: string; text?: string }[]) => {
-    const out: Proposal = { docs: [], requirements: [], issues: [], errors: [] };
+    const out: Proposal = { docs: [], sameAs: [], requirements: [], issues: [], errors: [] };
+    // Doküman kimlikleri (numara + revizyon): aynı resmin farklı formatlarını tanımak için
+    const known = project.documents.filter((d) => !d.deletedAt && d.docNumber).map((d) => ({ id: d.id, number: d.docNumber, revision: d.revision, label: `${d.name} (${d.filePath.split('.').pop() ?? d.docType})` }));
     const existing = existingSummary(project);
     const existingIssues = existingIssueSummary(project);
     for (const [i, j] of jobs.entries()) {
@@ -111,14 +117,29 @@ export function useExtraction() {
       }
       setBusy(`${step}: Claude okuyor…`);
       const off = api.onAiProgress((msg) => setBusy(`${step}: ${msg}`));
-      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, pdfText, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing, existingIssues });
+      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, pdfText, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing, existingIssues, existingDocs: known.filter((k) => k.id !== j.doc.id).map((k) => `${k.id} · no ${k.number} · rev ${k.revision || '-'} · ${k.label}`) });
       off();
       if (!r.ok) {
         out.errors.push(`${j.doc.id} ${j.doc.name}: ${r.error}`);
         continue;
       }
-      const d = r.data as { requirements: Json[]; issues: Json[] };
+      const d = r.data as { document?: { number: string; revision: string; title: string; sameAs: string }; requirements: Json[]; issues: Json[] };
       out.docs.push(j.doc);
+      const info = d.document;
+      if (info?.number) {
+        // Numara ve revizyon dokümana yazılır; eşleşme modelin cevabından bağımsız olarak burada da kontrol edilir.
+        const twin = known.find((k) => k.id !== j.doc.id && sameNo(k.number, info.number) && sameNo(k.revision, info.revision));
+        const twinId = twin?.id ?? (known.some((k) => k.id === info.sameAs) ? info.sameAs : '');
+        if (twinId) out.sameAs.push(`${j.doc.id} → ${twinId} (${info.number}${info.revision ? ` Rev ${info.revision}` : ''})`);
+        mutate((p) => {
+          const row = p.documents.find((x) => x.id === j.doc.id);
+          if (!row) return;
+          row.docNumber ||= info.number;
+          row.revision ||= info.revision;
+          if (twinId && !row.notes.includes(twinId)) row.notes = `${twinId} ile aynı resim (farklı format). ${row.notes}`.trim();
+        });
+        known.push({ id: j.doc.id, number: info.number, revision: info.revision, label: `${j.doc.name} (${ext})` });
+      }
       out.requirements.push(...d.requirements.map((x) => ({ ...x, docId: j.doc.id })));
       out.issues.push(...d.issues.map((x) => ({ ...x, docId: j.doc.id })));
       existing.push(...d.requirements.map((x) => `(yeni) ${String(x.text)}`));
@@ -126,7 +147,11 @@ export function useExtraction() {
     }
     setBusy(null);
     if (!out.requirements.length && !out.issues.length) {
-      toast(out.errors.length ? `AI hatası: ${out.errors.join(' · ')}` : 'AI bu dokümandan yeni gereksinim çıkarmadı.', out.errors.length ? 'err' : 'warn');
+      const at = new Date().toISOString();
+      mutate((p) => void p.documents.forEach((row) => out.docs.some((x) => x.id === row.id) && (row.extractedAt = at)));
+      if (out.errors.length) toast(`AI hatası: ${out.errors.join(' · ')}`, 'err');
+      else if (out.sameAs.length) toast(`Aynı resmin farklı formatı (${out.sameAs.join(' · ')}): yeni gereksinim veya açık konu yok.`);
+      else toast('AI bu dokümandan yeni gereksinim çıkarmadı.', 'warn');
       return;
     }
     setProposal(out);
@@ -242,6 +267,11 @@ function ProposalDialog({ proposal, onClose }: { proposal: Proposal; onClose: ()
       }
     >
       {proposal.errors.length > 0 && <div className="callout peach">Okunamayan dosyalar: {proposal.errors.join(' · ')}</div>}
+      {proposal.sameAs.length > 0 && (
+        <div className="callout">
+          Aynı resmin farklı formatı: {proposal.sameAs.join(' · ')}. Bu dokümanlar için yalnızca önceki formatta olmayan farklar listelenir.
+        </div>
+      )}
       <h3>
         <span className="badge b-lav">{proposal.requirements.length}</span> gereksinim
       </h3>
