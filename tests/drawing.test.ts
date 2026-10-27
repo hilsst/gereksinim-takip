@@ -113,7 +113,8 @@ describe('Resim bölgeleme', () => {
     expect(needsRaster('pdf', 'Teknik resim')).toBe(true);
     expect(needsRaster('pdf', 'Teknik şartname')).toBe(false);
     expect(needsRaster('dwg', 'Diğer')).toBe(true);
-    expect(needsRaster('docx', 'Teknik resim')).toBe(false);
+    expect(needsRaster('docx', 'Teknik şartname')).toBe(true); // gömülü görseller için
+    expect(needsRaster('xlsx', 'Teknik resim')).toBe(false);
   });
 });
 

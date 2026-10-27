@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import fs from 'node:fs';
 import path from 'node:path';
-import { htmlToText, toBlocks } from '../src/main/sources';
+import { docxMedia, htmlToText, toBlocks } from '../src/main/sources';
 
 const texts = (b: Awaited<ReturnType<typeof toBlocks>>) => b.map((x) => (x.type === 'text' ? x.text : `[${x.type}]`)).join('\n');
 
@@ -62,5 +63,17 @@ describe('Kaynak dönüştürme', () => {
     expect((await toBlocks(Buffer.from('%PDF-1.4'), 'resim.pdf'))[0].type).toBe('document');
     expect((await toBlocks(Buffer.from([0x89, 0x50]), 'a.png'))[0].type).toBe('image');
     await expect(toBlocks(Buffer.from(''), 'eski.doc')).rejects.toThrow(/docx/);
+  });
+
+  it('Word dosyasına gömülü görselleri büyükten küçüğe çıkarır, EMF/WMF sayar', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', '<w:document><w:body><w:p><w:r><w:t>Resim 1</w:t></w:r><w:r><w:t xml:space="preserve"> parça </w:t></w:r></w:p></w:body></w:document>');
+    zip.file('word/media/image1.png', new Uint8Array(10));
+    zip.file('word/media/image2.jpeg', new Uint8Array(500));
+    zip.file('word/media/image3.emf', new Uint8Array(50));
+    const m = await docxMedia(await zip.generateAsync({ type: 'nodebuffer' }));
+    expect(m.images.map((i) => i.name)).toEqual(['image2.jpeg', 'image1.png']);
+    expect(m.vector).toBe(1);
+    expect(m.textChars).toBe('Resim 1'.length + 'parça'.length);
   });
 });

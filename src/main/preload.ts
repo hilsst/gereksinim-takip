@@ -3,6 +3,7 @@ import type { SyncResult } from '../shared/planner';
 import type { Member } from '../shared/model';
 import type { DrawingImage } from '../shared/raster';
 import type { Project } from '../shared/types';
+import type { DocxMedia } from './sources';
 import type { UpdateStatus } from './updater';
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -25,6 +26,7 @@ const api = {
   aiStatus: (): Promise<{ configured: boolean; fromEnv: boolean }> => ipcRenderer.invoke('ai:status'),
   aiSetKey: (key: string) => ipcRenderer.invoke('ai:setKey', key),
   readFile: (p: string): Promise<Uint8Array> => ipcRenderer.invoke('file:read', p),
+  docxMedia: (p: string): Promise<Result<DocxMedia>> => ipcRenderer.invoke('docx:media', p),
   cadSvg: (p: string): Promise<Result<string | null>> => ipcRenderer.invoke('cad:svg', p),
   aiRequirements: (a: { filePath?: string; text?: string; images?: DrawingImage[]; pdfText?: string; drawing?: boolean; docId: string; docLabel: string; existing: string[]; existingIssues?: string[]; existingDocs?: string[] }): Promise<Result<unknown>> => ipcRenderer.invoke('ai:requirements', a),
   onAiProgress: (cb: (msg: string) => void) => {
