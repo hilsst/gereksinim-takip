@@ -142,6 +142,62 @@ async function fromImage(out: Collector, bytes: Uint8Array, name: string) {
   addPage(out, c, c.width, c.height, `Görsel ${name}`, 1);
 }
 
+// Word'deki logo, imza, simge gibi küçük görseller teknik resim sayılmaz.
+const MIN_DOCX_IMAGE_EDGE = 700;
+const MAX_DOCX_IMAGES = 6;
+
+/** Word'e gömülü görseller: resim ağırlıklı belgede her biri teknik resim sayfası gibi bölgelere ayrılır,
+ *  yazı ağırlıklı belgede (şartname) yalnızca küçültülmüş görünüm olarak eklenir. */
+async function fromDocx(out: Collector, filePath: string, drawing: boolean): Promise<string | undefined> {
+  const r = await api.docxMedia(filePath);
+  if (!r.ok) throw new Error(r.error);
+  const big: { name: string; bmp: CanvasImageSource; w: number; h: number }[] = [];
+  for (const m of r.data.images) {
+    if (big.length >= MAX_DOCX_IMAGES) break;
+    const ext = m.name.split('.').pop()?.toLowerCase();
+    let src: CanvasImageSource;
+    let w: number;
+    let h: number;
+    try {
+      if (ext === 'tif' || ext === 'tiff') {
+        const buf = m.data.buffer.slice(m.data.byteOffset, m.data.byteOffset + m.data.byteLength) as ArrayBuffer;
+        const ifd = UTIF.decode(buf).find((p) => p.t256 && p.t257);
+        if (!ifd) continue;
+        UTIF.decodeImage(buf, ifd);
+        const rgba = UTIF.toRGBA8(ifd);
+        const t = canvas(ifd.width, ifd.height);
+        t.ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, rgba.byteLength), ifd.width, ifd.height), 0, 0);
+        [src, w, h] = [t.c, ifd.width, ifd.height];
+      } else {
+        const bmp = await createImageBitmap(new Blob([m.data as BlobPart]));
+        [src, w, h] = [bmp, bmp.width, bmp.height];
+      }
+    } catch {
+      continue; // çözülemeyen görsel atlanır
+    }
+    if (Math.max(w, h) < MIN_DOCX_IMAGE_EDGE) continue;
+    big.push({ name: m.name, bmp: src, w, h });
+  }
+  // Az yazılı, birkaç büyük görselli Word genellikle içine resim yapıştırılmış bir teknik resimdir.
+  const asDrawing = drawing || (big.length > 0 && big.length <= 3 && r.data.textChars < 1500);
+  for (const [i, b] of big.entries()) {
+    const title = `Word görseli ${i + 1}/${big.length} (${b.name})`;
+    if (asDrawing) {
+      const edge = pickEdge(Math.min(b.w, b.h) / Math.max(b.w, b.h), tileBudget(big.length));
+      const c = fit(b.bmp, b.w, b.h, edge);
+      addPage(out, c, c.width, c.height, title, i + 1);
+    } else {
+      out.push(`${title} – küçültülmüş görünüm`, fit(b.bmp, b.w, b.h, TILE), 'overview', i + 1);
+    }
+    if (b.bmp instanceof ImageBitmap) b.bmp.close();
+  }
+  if (!big.length && r.data.vector) return `Word içindeki ${r.data.vector} çizim EMF/WMF vektör biçiminde ve okunamıyor. Resmi PDF veya PNG olarak ayrıca yükleyin.`;
+  // Yapıştırılan görsel büyütülemez; ölçü yazıları ~10 pikselin altına düşerse okunamaz.
+  if (asDrawing && big.some((b) => Math.max(b.w, b.h) < 2000)) return 'Word içindeki resmin çözünürlüğü düşük (uzun kenar 2000 pikselin altında); küçük ölçü yazıları okunamayabilir. Mümkünse resmin PDF veya DXF hâlini yükleyin.';
+  if (big.length && !asDrawing) return `Word içindeki ${big.length} görsel küçültülmüş olarak gönderildi. Teknik resimse doküman tipini "Teknik resim" yapıp tekrar çalıştırın.`;
+  return undefined;
+}
+
 async function fromTiff(out: Collector, bytes: Uint8Array) {
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const ifds = UTIF.decode(buf).filter((p) => p.t256 && p.t257);
@@ -198,10 +254,13 @@ async function legend(): Promise<DrawingImage> {
 }
 
 /** Dosyayı okuyup görüntülere çevirir. Hata olursa görüntüsüz devam edilebilmesi için not döner. */
-export async function prepareDrawing(filePath: string, name: string): Promise<Prepared> {
+export async function prepareDrawing(filePath: string, name: string, drawing = true): Promise<Prepared> {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   const out = new Collector();
-  if (ext === 'dxf' || ext === 'dwg') {
+  let note: string | undefined;
+  if (ext === 'docx') {
+    note = await fromDocx(out, filePath, drawing);
+  } else if (ext === 'dxf' || ext === 'dwg') {
     const r = await api.cadSvg(filePath);
     if (!r.ok) throw new Error(r.error);
     if (!r.data) return { images: [], note: 'Çizimde görüntülenecek geometri bulunamadı.' };
@@ -212,6 +271,7 @@ export async function prepareDrawing(filePath: string, name: string): Promise<Pr
     else if (ext === 'tif' || ext === 'tiff') await fromTiff(out, bytes);
     else await fromImage(out, bytes, name);
   }
-  if (out.images.length) out.images.unshift(await legend());
-  return { images: out.images, pdfText: out.text.join('\n') || undefined, note: out.skipped ? `${out.skipped} görüntü/sayfa boyut sınırı nedeniyle gönderilmedi.` : undefined };
+  if (out.images.some((i) => i.kind === 'tile')) out.images.unshift(await legend());
+  if (out.skipped) note = [note, `${out.skipped} görüntü/sayfa boyut sınırı nedeniyle gönderilmedi.`].filter(Boolean).join(' ');
+  return { images: out.images, pdfText: out.text.join('\n') || undefined, note };
 }

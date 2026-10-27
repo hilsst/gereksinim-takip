@@ -11,7 +11,7 @@ import type { Project } from '../shared/types';
 import * as ai from './ai';
 import { Graph } from './graph';
 import { readCad } from './dxf';
-import { SUPPORTED } from './sources';
+import { docxMedia, SUPPORTED } from './sources';
 import { checkForUpdates, initUpdater, installNow, type UpdateStatus } from './updater';
 
 const APP = 'Gereksinim Takip';
@@ -279,6 +279,7 @@ function registerIpc() {
     }
   });
   ipcMain.handle('ai:cancel', () => ai.cancel());
+  ipcMain.handle('docx:media', wrap(async (p: string) => docxMedia(await fs.readFile(p))));
   ipcMain.handle('cad:svg', wrap(async (p: string) => (await readCad(await fs.readFile(p), path.basename(p))).svg));
 
   type Cfg = { clientId: string; tenantId: string };

@@ -105,7 +105,7 @@ export function useExtraction() {
         setBusy(`${step}: teknik resim görüntüleri hazırlanıyor…`);
         try {
           const { prepareDrawing } = await import('../drawing'); // pdf.js yalnızca gerektiğinde yüklenir
-          const prep = await prepareDrawing(j.filePath, fileName);
+          const prep = await prepareDrawing(j.filePath, fileName, j.doc.docType === 'Teknik resim');
           images = prep.images;
           pdfText = prep.pdfText;
           if (prep.note) out.errors.push(`${j.doc.id}: ${prep.note}`);

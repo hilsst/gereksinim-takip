@@ -4,6 +4,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import MsgReader from '@kenjiuno/msgreader';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { simpleParser } from 'mailparser';
 import mammoth from 'mammoth';
 import fs from 'node:fs/promises';
@@ -69,6 +70,32 @@ async function excelText(buf: Buffer): Promise<string> {
 }
 
 const text = (t: string): Block => ({ type: 'text', text: t });
+
+export interface DocxMedia {
+  /** Word'e gömülü raster görseller (en büyükten küçüğe). */
+  images: { name: string; data: Uint8Array }[];
+  /** Okunamayan vektör görseller (EMF/WMF) sayısı. */
+  vector: number;
+  /** Belge gövdesindeki yazı uzunluğu (karakter). */
+  textChars: number;
+}
+
+/** Word dosyasına fotoğraf / ekran görüntüsü olarak eklenmiş görselleri çıkarır (teknik resim için). */
+export async function docxMedia(buf: Buffer): Promise<DocxMedia> {
+  const zip = await JSZip.loadAsync(buf);
+  const media = Object.values(zip.files).filter((f) => !f.dir && f.name.startsWith('word/media/'));
+  const images: DocxMedia['images'] = [];
+  let vector = 0;
+  for (const f of media) {
+    const ext = path.extname(f.name).toLowerCase();
+    if (ext === '.emf' || ext === '.wmf') vector++;
+    else if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tif', '.tiff'].includes(ext)) images.push({ name: path.basename(f.name), data: await f.async('uint8array') });
+  }
+  images.sort((a, b) => b.data.length - a.data.length);
+  const body = (await zip.file('word/document.xml')?.async('string')) ?? '';
+  const textChars = [...body.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].reduce((n, m) => n + m[1].trim().length, 0);
+  return { images, vector, textChars };
+}
 
 /** depth: e-posta içindeki e-postalar için sınır. */
 export async function toBlocks(buf: Buffer, name: string, depth = 0): Promise<Block[]> {

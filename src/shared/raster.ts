@@ -16,9 +16,9 @@ export const MIN_PAGE_EDGE = 4200;
 export const MAX_IMAGES = 80; // istek başına görüntü sınırı (API sınırı 100)
 export const MAX_IMAGE_BYTES = 16 * 1024 * 1024; // görüntülerin base64 toplamı
 
-export const RASTER_EXT = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'dxf', 'dwg'];
+export const RASTER_EXT = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'dxf', 'dwg', 'docx'];
 
-/** Bu doküman görüntü olarak hazırlanmalı mı? Görseller ve CAD her zaman; PDF yalnızca teknik resimse. */
+/** Bu doküman görüntü olarak hazırlanmalı mı? Görseller, CAD ve Word'e gömülü görseller her zaman; PDF yalnızca teknik resimse. */
 export function needsRaster(ext: string, docType: string) {
   if (!RASTER_EXT.includes(ext)) return false;
   return ext !== 'pdf' || docType === 'Teknik resim';

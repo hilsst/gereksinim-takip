@@ -251,7 +251,7 @@ export async function extractRequirements(cfg: AiConfig, input: ExtractInput, pr
       for (const img of images.filter((i) => i.kind !== 'legend')) content.push({ type: 'text', text: img.label }, imageBlock(img));
     }
     if (input.text) content.push({ type: 'text', text: input.text });
-    if (input.drawing || images.length) content.push({ type: 'text', text: DRAWING });
+    if (input.drawing || tiles.length) content.push({ type: 'text', text: DRAWING });
     content.push({
       type: 'text',
       text: `Bu doküman ${input.docId} (${input.docLabel}) olarak kayıtlı. Dokümanı analiz et ve gereksinim listesi çıkar.
