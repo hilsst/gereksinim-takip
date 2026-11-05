@@ -2,7 +2,7 @@
 // uydurma yok, eksik bilgi "VERİ YOK – doğrulanmalı", her satırda kaynak, öneriler "AI Proposed".
 import Anthropic from '@anthropic-ai/sdk';
 import path from 'node:path';
-import type { DrawingImage } from '../shared/raster';
+import { MAX_PDF_TEXT_CHARS, type DrawingImage } from '../shared/raster';
 import { fileBlocks } from './sources';
 
 // Haiku: yüksek hacimli çıkarma işi için hızlı ve düşük maliyetli. Haiku'da sunucu tarafı yedek model (fallbacks) yoktur.
@@ -236,10 +236,10 @@ export async function extractRequirements(cfg: AiConfig, input: ExtractInput, pr
       const ext = path.extname(input.filePath).toLowerCase();
       const name = path.basename(input.filePath);
       if (images.length && RASTER_ONLY.includes(ext)) content.push({ type: 'text', text: `Görsel dosya: ${name}` });
-      else if (images.length && ext === '.pdf') content.push({ type: 'text', text: `PDF teknik resim: ${name}` });
+      else if ((images.length || input.pdfText) && ext === '.pdf') content.push({ type: 'text', text: `${images.length ? 'PDF teknik resim' : 'PDF doküman (metin katmanı)'}: ${name}` });
       else content.push(...(await fileBlocks(input.filePath)));
     }
-    if (input.pdfText) content.push({ type: 'text', text: `## PDF metin katmanı (dosyadan okunan yazılar, sayfadaki konumuyla)\n${input.pdfText.slice(0, 60000)}` });
+    if (input.pdfText) content.push({ type: 'text', text: `## PDF metin katmanı (dosyadan okunan yazılar; yazı dolu sayfalar düz metin, resim sayfaları sayfadaki konumuyla)\n${input.pdfText.slice(0, MAX_PDF_TEXT_CHARS)}` });
     if (tiles.length) {
       progress(`Resim bölgeleri okunuyor: 0/${tiles.length}`);
       const ts = await transcribe(cfg, images, ctrl.signal, progress);
