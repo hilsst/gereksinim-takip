@@ -5,7 +5,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import * as UTIF from 'utif2';
 import { gdtLegendSvg } from '../shared/gdtLegend';
-import { grid, MAX_EDGE, MAX_IMAGE_BYTES, MAX_IMAGES, MIN_PAGE_EDGE, pickEdge, PX_PER_MM, TEXT_PX, TILE, tileBudget, zone, type DrawingImage } from '../shared/raster';
+import { grid, MAX_EDGE, MAX_IMAGE_BYTES, MAX_IMAGES, MAX_PDF_TEXT_CHARS, MIN_PAGE_EDGE, pickEdge, PX_PER_MM, TEXT_PX, TILE, tileBudget, zone, type DrawingImage } from '../shared/raster';
 import { api } from './api';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -49,6 +49,11 @@ class Collector {
   text: string[] = [];
   bytes = 0;
   skipped = 0;
+  /** Görüntü sınırına takılan sayfa numaraları. */
+  skippedPages: number[] = [];
+  /** Yazı dolu olduğu için görüntüye çevrilmeyip yalnızca metin olarak okunan sayfa sayısı. */
+  textPages = 0;
+  pages = 0;
   push(label: string, c: HTMLCanvasElement, kind: DrawingImage['kind'], page: number) {
     if (this.images.length >= MAX_IMAGES) return void this.skipped++;
     const e = encode(c);
@@ -76,8 +81,14 @@ function addPage(out: Collector, src: CanvasImageSource, w: number, h: number, t
   }
 }
 
-/** PDF'teki gerçek metinleri (CATIA çıktılarında yazılar genelde metin olarak durur) sayfadaki konumlarıyla verir. */
-async function pdfText(page: pdfjs.PDFPageProxy, n: number, w: number, h: number): Promise<string[]> {
+interface PdfLine {
+  s: string;
+  x: number;
+  y: number;
+}
+
+/** PDF'teki gerçek metinleri satır satır (yukarıdan aşağıya, soldan sağa) ve sayfadaki konumlarıyla okur. */
+async function pdfLines(page: pdfjs.PDFPageProxy, w: number, h: number): Promise<PdfLine[]> {
   const tc = await page.getTextContent();
   const vp = page.getViewport({ scale: 1 });
   const items: { s: string; x: number; y: number }[] = [];
@@ -96,16 +107,38 @@ async function pdfText(page: pdfjs.PDFPageProxy, n: number, w: number, h: number
       last.end = it.x + it.s.length * 0.5;
     } else lines.push({ ...it, end: it.x + it.s.length * 0.5 });
   }
-  return lines.map((l) => `- Sayfa ${n} (yatay %${Math.round(l.x)}, dikey %${Math.round(l.y)}): ${l.s}`);
+  return lines.map(({ s, x, y }) => ({ s, x, y }));
 }
+
+/** Teknik resim sayfaları: metin sayfadaki konumuyla verilir (ölçü hangi bölgede, belli olsun). */
+const positioned = (lines: PdfLine[], n: number) => lines.map((l) => `- Sayfa ${n} (yatay %${Math.round(l.x)}, dikey %${Math.round(l.y)}): ${l.s}`);
+
+// Bu kadar yazısı olan sayfa şartname / rapor sayfasıdır: metin katmanı eksiksiz okunur, sayfa görüntüye çevrilmez.
+// (Bir teknik resmin sayfasında ölçü, not ve antet birkaç yüz karakterdir.)
+const TEXT_PAGE_CHARS = 1500;
 
 async function fromPdf(out: Collector, bytes: Uint8Array) {
   const task = pdfjs.getDocument({ data: bytes, wasmUrl: asset('wasm'), standardFontDataUrl: asset('standard_fonts'), cMapUrl: asset('cmaps'), iccUrl: asset('iccs') });
   const doc = await task.promise;
   try {
-    const pages = Math.min(doc.numPages, MAX_IMAGES);
-    const budget = tileBudget(pages);
-    for (let i = 1; i <= pages; i++) {
+    out.pages = doc.numPages;
+    // Önce her sayfanın metin katmanı okunur (ucuz); yazı dolu sayfalar yalnızca metin olarak gönderilir.
+    const lines: PdfLine[][] = [];
+    const raster: number[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const vp1 = page.getViewport({ scale: 1 });
+      lines[i] = await pdfLines(page, vp1.width, vp1.height);
+      page.cleanup();
+      if (lines[i].reduce((n, l) => n + l.s.length, 0) >= TEXT_PAGE_CHARS) {
+        out.textPages++;
+        out.text.push(`### Sayfa ${i}/${doc.numPages} (metin)`, ...lines[i].map((l) => l.s));
+      } else raster.push(i);
+    }
+    const pages = raster.slice(0, MAX_IMAGES);
+    out.skippedPages.push(...raster.slice(MAX_IMAGES));
+    const budget = tileBudget(pages.length);
+    for (const i of pages) {
       const page = await doc.getPage(i);
       const vp1 = page.getViewport({ scale: 1 });
       const long = Math.max(vp1.width, vp1.height);
@@ -117,10 +150,11 @@ async function fromPdf(out: Collector, bytes: Uint8Array) {
       await page.render({ canvas: c, canvasContext: ctx, viewport: vp, background: '#ffffff' }).promise;
       addPage(out, c, c.width, c.height, `Sayfa ${i}/${doc.numPages}`, i);
       c.width = 0;
-      out.text.push(...(await pdfText(page, i, vp1.width, vp1.height)));
+      out.text.push(...positioned(lines[i], i));
       page.cleanup();
     }
-    if (doc.numPages > pages) out.skipped += doc.numPages - pages;
+    // Görüntüye çevrilemeyen sayfaların da metni gider.
+    for (const i of out.skippedPages) out.text.push(...positioned(lines[i], i));
   } finally {
     await task.destroy();
   }
@@ -236,6 +270,8 @@ export interface Prepared {
   /** PDF metin katmanı (konumlu satırlar); yoksa boş. */
   pdfText?: string;
   note?: string;
+  /** Sayfaların çoğu yazı dolu: şartname / rapor; teknik resim kuralları uygulanmaz. */
+  textHeavy?: boolean;
 }
 
 async function svgImage(svg: string): Promise<HTMLImageElement> {
@@ -272,6 +308,26 @@ export async function prepareDrawing(filePath: string, name: string, drawing = t
     else await fromImage(out, bytes, name);
   }
   if (out.images.some((i) => i.kind === 'tile')) out.images.unshift(await legend());
-  if (out.skipped) note = [note, `${out.skipped} görüntü/sayfa boyut sınırı nedeniyle gönderilmedi.`].filter(Boolean).join(' ');
-  return { images: out.images, pdfText: out.text.join('\n') || undefined, note };
+  const notes = [note];
+  if (out.skipped) notes.push(`${out.skipped} görüntü boyut sınırı nedeniyle gönderilmedi.`);
+  if (out.skippedPages.length) notes.push(`Sayfa ${out.skippedPages.length > 8 ? `${out.skippedPages.slice(0, 8).join(', ')}… (${out.skippedPages.length} sayfa)` : out.skippedPages.join(', ')} görüntü sınırı nedeniyle yalnızca metin olarak gönderildi.`);
+  const textHeavy = out.pages > 0 && out.textPages >= out.pages / 2;
+  if (textHeavy) notes.push(`Belge yazı ağırlıklı (${out.textPages}/${out.pages} sayfa); metin olarak okundu, teknik resim kuralları uygulanmadı.`);
+  // Metin sınırı: yalnızca tam sayfalar gönderilir, kesilen sayfalar bildirilir.
+  let chars = 0;
+  let cut = out.text.length;
+  for (const [i, t] of out.text.entries()) {
+    chars += t.length + 1;
+    if (chars > MAX_PDF_TEXT_CHARS && i > 0) {
+      cut = i;
+      while (cut > 0 && !out.text[cut].startsWith('###') && !out.text[cut].startsWith('- Sayfa')) cut--;
+      break;
+    }
+  }
+  if (cut < out.text.length) {
+    const first = /Sayfa (\d+)/.exec(out.text[cut])?.[1];
+    notes.push(`Metin çok uzun: sayfa ${first ?? '?'} ve sonrası gönderilemedi. Belgeyi bölümlere ayırıp ayrı ayrı yükleyin.`);
+    out.text.length = cut;
+  }
+  return { images: out.images, pdfText: out.text.join('\n') || undefined, note: notes.filter(Boolean).join(' ') || undefined, textHeavy };
 }

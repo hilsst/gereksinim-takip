@@ -13,6 +13,8 @@ export const TEXT_PX = 35;
 // A3 resimler sıkça A4 sayfaya küçültülerek yazdırılır ("Microsoft Print to PDF"); sayfa A4 görünse de
 // en az A3 @ PX_PER_MM çözünürlükle işlenir, yoksa antet ve tolerans tablosu yazıları okunamaz.
 export const MIN_PAGE_EDGE = 4200;
+// Metin katmanının tek istekte gönderilebilecek en büyük uzunluğu (karakter); fazlası kesilir ve kullanıcıya bildirilir.
+export const MAX_PDF_TEXT_CHARS = 150_000;
 export const MAX_IMAGES = 80; // istek başına görüntü sınırı (API sınırı 100)
 export const MAX_IMAGE_BYTES = 16 * 1024 * 1024; // görüntülerin base64 toplamı
 

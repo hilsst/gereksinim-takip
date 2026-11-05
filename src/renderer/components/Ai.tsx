@@ -101,6 +101,7 @@ export function useExtraction() {
       const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
       let images: DrawingImage[] | undefined;
       let pdfText: string | undefined;
+      let textHeavy = false;
       if (j.filePath && needsRaster(ext, j.doc.docType)) {
         setBusy(`${step}: teknik resim görüntüleri hazırlanıyor…`);
         try {
@@ -108,6 +109,7 @@ export function useExtraction() {
           const prep = await prepareDrawing(j.filePath, fileName, j.doc.docType === 'Teknik resim');
           images = prep.images;
           pdfText = prep.pdfText;
+          textHeavy = !!prep.textHeavy;
           if (prep.note) out.errors.push(`${j.doc.id}: ${prep.note}`);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -121,7 +123,7 @@ export function useExtraction() {
       }
       setBusy(`${step}: Claude okuyor…`);
       const off = api.onAiProgress((msg) => setBusy(`${step}: ${msg}`));
-      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, pdfText, drawing: j.doc.docType === 'Teknik resim', docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing, existingIssues, existingDocs: known.filter((k) => k.id !== j.doc.id).map((k) => `${k.id} · no ${k.number} · rev ${k.revision || '-'} · ${k.label}`) });
+      const r = await api.aiRequirements({ filePath: j.filePath, text: j.text, images, pdfText, drawing: j.doc.docType === 'Teknik resim' && !textHeavy, docId: j.doc.id, docLabel: `${j.doc.docType} – ${j.doc.name}`, existing, existingIssues, existingDocs: known.filter((k) => k.id !== j.doc.id).map((k) => `${k.id} · no ${k.number} · rev ${k.revision || '-'} · ${k.label}`) });
       off();
       if (!r.ok) {
         out.errors.push(`${j.doc.id} ${j.doc.name}: ${r.error}`);
