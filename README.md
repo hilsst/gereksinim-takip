@@ -74,6 +74,7 @@ Giriş kişinin kendi hesabıyla yapılır (delegated); token işletim sistemini
 - **Kaynak**: gereksinim ve açık konuda kaynak doküman (DOC-001) ile doküman içindeki yer (sayfa, madde, ölçü no) ayrı alanlardır.
 - **Eski dosyalar** (v0.5 ve öncesi, şema 1) açılırken dönüşür; dönüşmeden önceki hâli yanına `<ad>.sema1-yedek.greq` olarak kopyalanır.
 - **Excel raporu**: Özet (kişi bazında), Gereksinimler, Açık Konular, Dokümanlar, Ekip, Planner Günlüğü, Silinenler, Değişiklik Geçmişi.
+- Çıkarma yönteminin ayrıntısı (akış, şema, prompt'lar, kurallar, başka uygulamaya taşıma kontrol listesi): [docs/cikarim-yontemi.md](docs/cikarim-yontemi.md).
 - AI çıkarma **Claude Haiku** (`claude-haiku-5-5`) modeliyle yapılır ve dokümanları Anthropic API’sine gönderir; anahtar **Ayarlar**’dan girilir veya `ANTHROPIC_API_KEY` ortam değişkeni kullanılır.
 
 ## Geliştirme
